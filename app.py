@@ -231,7 +231,17 @@ with st.sidebar:
     sectors = ["Todos"] + sorted(df["sector"].dropna().unique().tolist())
     selected_sector = st.selectbox("Sector", sectors)
 
-    min_debtors = st.slider("Mínimo deudores", 0, 250_000, 1_000, step=1_000)
+    min_debtors = st.slider(
+        "Mínimo deudores por entidad",
+        0,
+        250_000,
+        1_000,
+        step=1_000,
+        help=(
+            "Filtra entidades con al menos esta cantidad de deudores en el segmento elegido. "
+            "Sirve para sacar casos muy chicos donde un porcentaje alto puede venir de pocos registros."
+        ),
+    )
 
     search = st.text_input("Buscar entidad", placeholder="Ej. UALA, Nexo, Galicia...")
 
@@ -418,5 +428,6 @@ st.dataframe(
 
 st.caption(
     "Fuente: BCRA Central de Deudores del Sistema Financiero. "
-    "Irregularidad definida como situaciones 2 a 5. Situación 11 se muestra separada como cubierta."
+    "El dashboard usa agregados por entidad y segmento, no el TXT bruto. "
+    "Irregularidad definida como situaciones 2 a 5. Situación 1 es normal y situación 11 se muestra separada como cubierta."
 )
