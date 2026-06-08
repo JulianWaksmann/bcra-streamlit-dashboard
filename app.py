@@ -245,7 +245,15 @@ st.markdown(
 
 with st.sidebar:
     st.header("Explorar")
-    selected_segment = st.radio("Segmento", ["Familias", "Empresas", "Total"], index=0)
+    selected_segment = st.radio(
+        "Segmento",
+        ["Familias", "Empresas", "Total"],
+        index=0,
+        help=(
+            "Empresas: CUIT con prefijo 30, 33 o 34. "
+            "Familias: todo el resto de identificadores. Total: empresas + familias."
+        ),
+    )
 
     st.caption("Niveles de situacion")
     selected_levels = {
