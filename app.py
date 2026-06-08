@@ -256,16 +256,19 @@ with st.sidebar:
         ),
     )
 
-    st.caption("Niveles de situacion")
+    st.markdown(
+        """
+        <div style="font-size:0.875rem; margin-bottom:0.35rem;">
+            Niveles de situacion
+            <span title="Los KPIs, rankings y montos se recalculan con los niveles marcados." style="cursor:help; color:#9aa3b2;">?</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     selected_levels = {
         level
         for level in LEVEL_ORDER
-        if st.checkbox(
-            LEVEL_LABELS[level],
-            value=True,
-            key=f"level_{level}",
-            help="Los KPIs, rankings y montos se recalculan con los niveles marcados.",
-        )
+        if st.checkbox(LEVEL_LABELS[level], value=True, key=f"level_{level}")
     }
 
     sectors = ["Todos"] + sorted(df["sector"].dropna().unique().tolist())
