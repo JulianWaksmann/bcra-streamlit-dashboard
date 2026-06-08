@@ -417,7 +417,7 @@ with left:
             custom_data=["entidad"],
         )
         fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
-        fig_rank.update_layout(coloraxis_showscale=False)
+        fig_rank.update_layout(coloraxis_showscale=False, dragmode=False)
         rank_event = st.plotly_chart(
             base_layout(fig_rank, height=520),
             width="stretch",
