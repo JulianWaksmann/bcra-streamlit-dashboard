@@ -9,8 +9,20 @@ import streamlit as st
 
 
 APP_DIR = Path(__file__).parent
-DATA_PATH = APP_DIR / "data" / "morosidad_entidad_202604.csv"
+DATA_PATH = APP_DIR / "data" / "morosidad_niveles_202604.csv"
 PERIOD_LABEL = "Abril 2026"
+
+LEVEL_LABELS = {
+    "0": "0 - Sin situacion",
+    "1": "1 - Normal",
+    "2": "2 - Seguimiento especial",
+    "3": "3 - Problemas",
+    "4": "4 - Alto riesgo",
+    "5": "5 - Irrecuperable",
+    "11": "11 - Cubierta garantia A",
+}
+LEVEL_ORDER = ["0", "1", "2", "3", "4", "5", "11"]
+RISK_LEVELS = {"2", "3", "4", "5"}
 
 
 st.set_page_config(
@@ -115,13 +127,6 @@ CSS = """
         font-weight: 700;
     }
 
-    div[data-testid="stMetric"] {
-        background: var(--panel);
-        border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 8px;
-        padding: 0.85rem 1rem;
-    }
-
     .stDataFrame {
         border: 1px solid rgba(255,255,255,0.10);
         border-radius: 8px;
@@ -135,24 +140,20 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
 def load_data() -> pd.DataFrame:
-    df = pd.read_csv(DATA_PATH, dtype={"codigo_entidad": str, "fecha_info": str})
+    df = pd.read_csv(DATA_PATH, dtype={"codigo_entidad": str, "fecha_info": str, "situacion_codigo": str})
     numeric_cols = [
-        "deudores_total",
-        "deudores_irregulares",
-        "pct_irregular_cantidad",
-        "credito_total_miles_pesos",
-        "credito_irregular_miles_pesos",
-        "pct_irregular_monto",
-        "registros_situacion_1",
-        "registros_situacion_2",
-        "registros_situacion_3",
-        "registros_situacion_4",
-        "registros_situacion_5",
-        "registros_situacion_11",
+        "deudores",
+        "monto_total_miles_pesos",
+        "monto_promedio_miles_pesos",
+        "pct_deudores_segmento",
+        "pct_monto_segmento",
+        "registros_origen",
     ]
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["situacion_codigo"] = df["situacion_codigo"].replace({"nan": "0", "": "0"}).fillna("0")
     df["entidad"] = df["codigo_entidad"] + " · " + df["nombre_entidad"]
+    df["nivel"] = df["situacion_codigo"].map(LEVEL_LABELS).fillna(df["situacion_codigo"])
     return df
 
 
@@ -211,13 +212,29 @@ def kpi_card(label: str, value: str, sub: str = "") -> None:
     )
 
 
+def aggregate_entities(df: pd.DataFrame) -> pd.DataFrame:
+    grouped = (
+        df.groupby(["codigo_entidad", "nombre_entidad", "sector", "tipo_segmento"], as_index=False)
+        .agg(
+            deudores=("deudores", "sum"),
+            monto_total_miles_pesos=("monto_total_miles_pesos", "sum"),
+            registros_origen=("registros_origen", "sum"),
+        )
+    )
+    grouped["monto_promedio_miles_pesos"] = (
+        grouped["monto_total_miles_pesos"] / grouped["deudores"].replace(0, pd.NA)
+    ).fillna(0)
+    grouped["entidad"] = grouped["codigo_entidad"] + " · " + grouped["nombre_entidad"]
+    return grouped
+
+
 df = load_data()
 
 st.markdown(
     f"""
     <div class="hero">
         <h1>Mapa de morosidad BCRA</h1>
-        <p>{PERIOD_LABEL}. Entidades financieras y no financieras, segmentadas por familias, empresas y total.</p>
+        <p>{PERIOD_LABEL}. Deudores por entidad, segmento y nivel de situacion.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -225,21 +242,38 @@ st.markdown(
 
 with st.sidebar:
     st.header("Explorar")
-    segment_options = ["Familias", "Empresas", "Total", "Desconocido"]
-    selected_segment = st.radio("Segmento", segment_options, index=0)
+    selected_segment = st.radio("Segmento", ["Familias", "Empresas", "Total"], index=0)
+
+    st.caption("Niveles de situacion")
+    all_levels = st.checkbox(
+        "Todos los niveles",
+        value=True,
+        help=(
+            "Los KPIs, rankings y montos se recalculan con los niveles seleccionados. "
+            "Si esta activo, ves el total del segmento."
+        ),
+    )
+    if all_levels:
+        selected_levels = set(LEVEL_ORDER)
+    else:
+        selected_levels = {
+            level
+            for level in LEVEL_ORDER
+            if st.checkbox(LEVEL_LABELS[level], value=level in RISK_LEVELS, key=f"level_{level}")
+        }
 
     sectors = ["Todos"] + sorted(df["sector"].dropna().unique().tolist())
     selected_sector = st.selectbox("Sector", sectors)
 
     min_debtors = st.slider(
-        "Mínimo deudores por entidad",
+        "Minimo deudores por entidad",
         0,
         250_000,
         1_000,
         step=1_000,
         help=(
-            "Filtra entidades con al menos esta cantidad de deudores en el segmento elegido. "
-            "Sirve para sacar casos muy chicos donde un porcentaje alto puede venir de pocos registros."
+            "Filtra entidades con al menos esta cantidad de deudores dentro de los niveles seleccionados. "
+            "Sirve para sacar casos chicos que distorsionan porcentajes y promedios."
         ),
     )
 
@@ -247,56 +281,70 @@ with st.sidebar:
 
     metric_mode = st.segmented_control(
         "Ranking",
-        options=["% monto", "% cantidad", "crédito irregular"],
-        default="% monto",
+        options=["monto total", "cantidad deudores", "monto promedio"],
+        default="monto total",
     )
 
+if not selected_levels:
+    st.warning("Selecciona al menos un nivel de situacion.")
+    st.stop()
 
-filtered = df[df["tipo_segmento"].eq(selected_segment)].copy()
+base = df[df["tipo_segmento"].eq(selected_segment)].copy()
 if selected_sector != "Todos":
-    filtered = filtered[filtered["sector"].eq(selected_sector)]
-if min_debtors:
-    filtered = filtered[filtered["deudores_total"].ge(min_debtors)]
+    base = base[base["sector"].eq(selected_sector)]
 if search.strip():
     needle = search.strip().casefold()
-    filtered = filtered[
-        filtered["entidad"].str.casefold().str.contains(needle, regex=False)
+    base = base[base["entidad"].str.casefold().str.contains(needle, regex=False)]
+
+selected_rows = base[base["situacion_codigo"].isin(selected_levels)].copy()
+entity_totals_all_levels = aggregate_entities(base)
+entity_selected = aggregate_entities(selected_rows)
+
+if min_debtors:
+    entity_selected = entity_selected[entity_selected["deudores"].ge(min_debtors)]
+    selected_entity_codes = set(entity_selected["codigo_entidad"])
+    selected_rows = selected_rows[selected_rows["codigo_entidad"].isin(selected_entity_codes)]
+    base = base[base["codigo_entidad"].isin(selected_entity_codes)]
+    entity_totals_all_levels = entity_totals_all_levels[
+        entity_totals_all_levels["codigo_entidad"].isin(selected_entity_codes)
     ]
 
-total_credit = filtered["credito_total_miles_pesos"].sum()
-irregular_credit = filtered["credito_irregular_miles_pesos"].sum()
-total_debtors = filtered["deudores_total"].sum()
-irregular_debtors = filtered["deudores_irregulares"].sum()
-irregular_amount_pct = weighted_pct(irregular_credit, total_credit)
-irregular_count_pct = weighted_pct(irregular_debtors, total_debtors)
+total_debtors = entity_selected["deudores"].sum()
+total_amount = entity_selected["monto_total_miles_pesos"].sum()
+all_level_debtors = entity_totals_all_levels["deudores"].sum()
+all_level_amount = entity_totals_all_levels["monto_total_miles_pesos"].sum()
+avg_amount = 0.0 if total_debtors == 0 else total_amount / total_debtors
+risk_rows = base[base["situacion_codigo"].isin(RISK_LEVELS)]
+risk_debtors = risk_rows["deudores"].sum()
+risk_amount = risk_rows["monto_total_miles_pesos"].sum()
 
 k1, k2, k3, k4 = st.columns(4)
 with k1:
-    kpi_card("% irreg. monto", fmt_pct(irregular_amount_pct), fmt_money_miles(irregular_credit))
+    kpi_card("Monto niveles seleccionados", fmt_money_miles(total_amount), f"{fmt_pct(weighted_pct(total_amount, all_level_amount))} del monto total")
 with k2:
-    kpi_card("% irreg. cantidad", fmt_pct(irregular_count_pct), f"{fmt_int(irregular_debtors)} irregulares")
+    kpi_card("Deudores seleccionados", fmt_int(total_debtors), f"{fmt_pct(weighted_pct(total_debtors, all_level_debtors))} del segmento")
 with k3:
-    kpi_card("Crédito total", fmt_money_miles(total_credit), "montos expresados en miles de pesos")
+    kpi_card("Promedio por deudor", fmt_money_miles(avg_amount), "monto dentro de cada entidad")
 with k4:
-    kpi_card("Deudores total", fmt_int(total_debtors), f"{len(filtered)} filas entidad-segmento")
+    kpi_card("Mora 2 a 5", fmt_pct(weighted_pct(risk_amount, all_level_amount)), f"{fmt_int(risk_debtors)} deudores")
 
-if filtered.empty:
+if entity_selected.empty:
     st.warning("No hay datos para los filtros seleccionados.")
     st.stop()
 
 left, right = st.columns([2.05, 1])
 
 rank_metric = {
-    "% monto": "pct_irregular_monto",
-    "% cantidad": "pct_irregular_cantidad",
-    "crédito irregular": "credito_irregular_miles_pesos",
+    "monto total": "monto_total_miles_pesos",
+    "cantidad deudores": "deudores",
+    "monto promedio": "monto_promedio_miles_pesos",
 }[metric_mode]
 
-top = filtered.sort_values(rank_metric, ascending=False).head(15).copy()
+top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
 top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
 
 with left:
-    st.markdown('<div class="section-title">Ranking de alerta</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
     fig_rank = px.bar(
         top.sort_values(rank_metric),
         x=rank_metric,
@@ -306,19 +354,16 @@ with left:
         color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
         labels={
             "nombre_corto": "",
-            "pct_irregular_monto": "% irregular por monto",
-            "pct_irregular_cantidad": "% irregular por cantidad",
-            "credito_irregular_miles_pesos": "crédito irregular (miles $)",
+            "monto_total_miles_pesos": "monto total (miles $)",
+            "deudores": "deudores",
+            "monto_promedio_miles_pesos": "monto promedio (miles $)",
         },
         hover_data={
             "codigo_entidad": True,
             "nombre_entidad": True,
-            "deudores_total": ":,.0f",
-            "deudores_irregulares": ":,.0f",
-            "credito_total_miles_pesos": ":,.0f",
-            "credito_irregular_miles_pesos": ":,.0f",
-            "pct_irregular_monto": ":.2f",
-            "pct_irregular_cantidad": ":.2f",
+            "deudores": ":,.0f",
+            "monto_total_miles_pesos": ":,.0f",
+            "monto_promedio_miles_pesos": ":,.1f",
             "nombre_corto": False,
         },
     )
@@ -327,107 +372,109 @@ with left:
     st.plotly_chart(base_layout(fig_rank, height=520), width="stretch")
 
 with right:
-    el_nexo = df[(df["codigo_entidad"].eq("55333")) & (df["tipo_segmento"].eq("Familias"))]
     st.markdown('<div class="section-title">Foco 55333</div>', unsafe_allow_html=True)
+    el_nexo = entity_selected[entity_selected["codigo_entidad"].eq("55333")]
     if not el_nexo.empty:
         row = el_nexo.iloc[0]
         st.markdown(
             f"""
             <div class="callout">
                 <strong>{row["nombre_entidad"]}</strong><br>
-                Sector: {row["sector"]} · Tipo: Familias<br><br>
-                <strong>{fmt_pct(row["pct_irregular_monto"])}</strong> irregular por monto<br>
-                <strong>{fmt_pct(row["pct_irregular_cantidad"])}</strong> irregular por cantidad<br><br>
-                Crédito total: <strong>{fmt_money_miles(row["credito_total_miles_pesos"])}</strong><br>
-                Deudores: <strong>{fmt_int(row["deudores_total"])}</strong>
+                Sector: {row["sector"]} · Tipo: {row["tipo_segmento"]}<br><br>
+                Monto seleccionado: <strong>{fmt_money_miles(row["monto_total_miles_pesos"])}</strong><br>
+                Deudores seleccionados: <strong>{fmt_int(row["deudores"])}</strong><br>
+                Promedio por deudor: <strong>{fmt_money_miles(row["monto_promedio_miles_pesos"])}</strong>
             </div>
             """,
             unsafe_allow_html=True,
         )
+    else:
+        st.info("El Nexo no aparece con los filtros actuales.")
 
-    st.markdown('<div class="section-title">Composición del riesgo</div>', unsafe_allow_html=True)
-    situation_totals = filtered[
-        [
-            "registros_situacion_1",
-            "registros_situacion_2",
-            "registros_situacion_3",
-            "registros_situacion_4",
-            "registros_situacion_5",
-            "registros_situacion_11",
-        ]
-    ].sum()
-    situation_df = pd.DataFrame(
-        {
-            "situación": ["1 Normal", "2 Bajo", "3 Medio", "4 Alto", "5 Irrecuperable", "11 Cubierta"],
-            "registros": situation_totals.values,
-        }
+    st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
+    level_totals = (
+        selected_rows.groupby(["situacion_codigo", "nivel"], as_index=False)
+        .agg(deudores=("deudores", "sum"), monto_total_miles_pesos=("monto_total_miles_pesos", "sum"))
+        .sort_values("situacion_codigo", key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}))
     )
     fig_donut = px.pie(
-        situation_df,
-        names="situación",
-        values="registros",
+        level_totals,
+        names="nivel",
+        values="monto_total_miles_pesos",
         hole=0.58,
-        color_discrete_sequence=["#58d68d", "#4c8dff", "#f2b84b", "#ff8d4c", "#ff5c68", "#9aa3b2"],
+        color="situacion_codigo",
+        color_discrete_map={
+            "0": "#9aa3b2",
+            "1": "#58d68d",
+            "2": "#4c8dff",
+            "3": "#f2b84b",
+            "4": "#ff8d4c",
+            "5": "#ff5c68",
+            "11": "#7f8cff",
+        },
     )
     fig_donut.update_traces(textposition="inside", textinfo="percent")
     st.plotly_chart(base_layout(fig_donut, height=325), width="stretch")
 
-st.markdown('<div class="section-title">Mapa monto vs cantidad</div>', unsafe_allow_html=True)
-scatter_source = filtered[filtered["deudores_total"].gt(0)].copy()
-scatter_source["credito_total_log"] = scatter_source["credito_total_miles_pesos"].clip(lower=1)
+st.markdown('<div class="section-title">Mapa cantidad vs monto promedio</div>', unsafe_allow_html=True)
+scatter_source = entity_selected[entity_selected["deudores"].gt(0)].copy()
+scatter_source["bubble_size"] = scatter_source["monto_total_miles_pesos"].clip(lower=1)
 fig_scatter = px.scatter(
     scatter_source,
-    x="pct_irregular_cantidad",
-    y="pct_irregular_monto",
-    size="credito_total_log",
+    x="deudores",
+    y="monto_promedio_miles_pesos",
+    size="bubble_size",
     color="sector",
     hover_name="nombre_entidad",
     hover_data={
         "codigo_entidad": True,
-        "deudores_total": ":,.0f",
-        "deudores_irregulares": ":,.0f",
-        "credito_total_miles_pesos": ":,.0f",
-        "credito_irregular_miles_pesos": ":,.0f",
-        "pct_irregular_cantidad": ":.2f",
-        "pct_irregular_monto": ":.2f",
-        "credito_total_log": False,
+        "deudores": ":,.0f",
+        "monto_total_miles_pesos": ":,.0f",
+        "monto_promedio_miles_pesos": ":,.1f",
+        "bubble_size": False,
     },
     labels={
-        "pct_irregular_cantidad": "% irregular cantidad",
-        "pct_irregular_monto": "% irregular monto",
+        "deudores": "deudores en niveles seleccionados",
+        "monto_promedio_miles_pesos": "monto promedio por deudor (miles $)",
     },
     color_discrete_map={"Financiero": "#4c8dff", "No Financiero": "#ff5c68"},
 )
+fig_scatter.update_xaxes(type="log")
 fig_scatter.update_traces(marker=dict(opacity=0.72, line=dict(width=0.5, color="rgba(255,255,255,0.35)")))
 st.plotly_chart(base_layout(fig_scatter, height=460), width="stretch")
 
-table_cols = [
-    "codigo_entidad",
-    "nombre_entidad",
-    "sector",
-    "tipo_segmento",
-    "deudores_total",
-    "deudores_irregulares",
-    "pct_irregular_cantidad",
-    "credito_total_miles_pesos",
-    "credito_irregular_miles_pesos",
-    "pct_irregular_monto",
+st.markdown('<div class="section-title">Detalle por entidad y nivel</div>', unsafe_allow_html=True)
+detail = selected_rows.sort_values(["codigo_entidad", "situacion_codigo"])[
+    [
+        "codigo_entidad",
+        "nombre_entidad",
+        "sector",
+        "tipo_segmento",
+        "nivel",
+        "deudores",
+        "monto_total_miles_pesos",
+        "monto_promedio_miles_pesos",
+        "pct_deudores_segmento",
+        "pct_monto_segmento",
+    ]
 ]
-st.markdown('<div class="section-title">Detalle descargable</div>', unsafe_allow_html=True)
+
 st.dataframe(
-    filtered.sort_values(rank_metric, ascending=False)[table_cols],
+    detail,
     width="stretch",
     hide_index=True,
     column_config={
-        "pct_irregular_cantidad": st.column_config.NumberColumn("% irreg. cantidad", format="%.2f%%"),
-        "pct_irregular_monto": st.column_config.NumberColumn("% irreg. monto", format="%.2f%%"),
-        "credito_total_miles_pesos": st.column_config.NumberColumn("crédito total miles $", format="%.0f"),
-        "credito_irregular_miles_pesos": st.column_config.NumberColumn("crédito irregular miles $", format="%.0f"),
+        "nivel": "nivel situacion",
+        "monto_total_miles_pesos": st.column_config.NumberColumn("monto total miles $", format="%.0f"),
+        "monto_promedio_miles_pesos": st.column_config.NumberColumn("promedio miles $", format="%.1f"),
+        "pct_deudores_segmento": st.column_config.NumberColumn("% deudores segmento", format="%.2f%%"),
+        "pct_monto_segmento": st.column_config.NumberColumn("% monto segmento", format="%.2f%%"),
     },
 )
 
 st.caption(
     "Fuente: BCRA Central de Deudores del Sistema Financiero. "
-    "El dashboard usa agregados por entidad y segmento, no el TXT bruto. "
-    "Irregularidad definida como situaciones 2 a 5. Situación 1 es normal y situación 11 se muestra separada como cubierta."
+    "Conteo por entidad-deudor: una misma persona cuenta una vez por cada entidad donde aparece. "
+    "Empresas: prefijos CUIT 30, 33 y 34; todo el resto se clasifica como Familias. "
+    "Los montos corresponden al deudor dentro de esa entidad, no a su deuda total en el sistema."
 )

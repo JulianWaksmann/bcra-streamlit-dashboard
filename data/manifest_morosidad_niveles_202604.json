@@ -1,0 +1,12 @@
+{
+  "total_rows": 40656974,
+  "included_rows": 40452965,
+  "period_filter": "202604",
+  "skipped_period_rows": 204009,
+  "bad_length_rows": 0,
+  "consolidated_entity_debtors": 40452965,
+  "duplicate_source_rows_same_entity_debtor": 0,
+  "out_of_order_rows": 19963861,
+  "unknown_situation_rows": 0,
+  "level_metrics": "data/morosidad_niveles_202604.csv"
+}

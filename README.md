@@ -1,70 +1,118 @@
 # BCRA Morosidad Dashboard
 
-Dashboard Streamlit para explorar morosidad de entidades informantes de la Central de Deudores BCRA.
+Dashboard Streamlit para explorar deudores y niveles de situacion por entidad informante de la Central de Deudores BCRA.
 
 Periodo incluido: `202604`.
 
-El objetivo del tablero es mirar morosidad a nivel agregado, sin cargar en la app el archivo bruto completo de deudores. El TXT original tiene mas de 40 millones de registros, por eso se proceso previamente y se dejo en este repo solamente una version resumida por entidad, sector y tipo de persona.
+El objetivo del tablero es mirar la distribucion de deuda por entidad, segmento y nivel de situacion, sin cargar en la app el archivo bruto completo. El TXT original tiene mas de 40 millones de registros, por eso se procesa previamente y en este repo queda solamente una version agregada y liviana.
 
-## Criterio de procesamiento
+## Grano de analisis
 
-La fuente primaria es el archivo de deudores BCRA del periodo `202604`, interpretado segun el PDF de especificacion incluido en la descarga original. Cada linea del TXT representa una deuda informada por una entidad para un identificador de deudor.
+El conteo se hace por relacion **entidad + identificador de deudor**.
 
-Para el dashboard no se usa el detalle completo. Se construyen agregados por:
+Eso significa que una misma persona puede contar mas de una vez en el sistema si aparece en mas de una entidad, pero solo una vez dentro de cada entidad.
 
-- codigo de entidad
-- nombre de entidad
-- sector de entidad: financiero / no financiero
-- tipo de segmento: familias / empresas / total
+Ejemplo:
 
-El tipo de segmento se infiere desde el identificador fiscal:
+| Deudor | Entidad | Situacion | Como cuenta |
+| --- | --- | ---: | --- |
+| A | Galicia | 4 | +1 en Galicia nivel 4 |
+| A | Macro | 1 | +1 en Macro nivel 1 |
 
-- familias: CUIT/CUIL con prefijos `20`, `23`, `24` o `27`
-- empresas: CUIT con prefijos `30`, `33` o `34`
-- desconocido: identificadores que no entran en esas reglas
-- total: suma general de la entidad
+Esta distincion es importante: el dashboard evalua la cartera de cada entidad, no la situacion global consolidada de una persona en todo el sistema financiero.
 
-## Que valores se filtran
+## Montos
 
-La morosidad se calcula tomando como irregulares las situaciones BCRA `2`, `3`, `4` y `5`.
+Los montos tambien se toman dentro de cada entidad.
 
-- Situacion `1`: normal. No se considera morosa.
-- Situaciones `2` a `5`: deuda irregular. Son el foco del tablero.
-- Situacion `11`: asistencias cubiertas totalmente con garantias preferidas A. Se conserva separada para no mezclarla con mora tradicional.
+Si una persona debe `100` en Galicia y `50` en Macro:
 
-Esto permite responder preguntas como:
+- Galicia suma `100`
+- Macro suma `50`
+- no se asigna el total `150` a ninguna de las dos entidades
 
-- que entidades tienen mayor porcentaje irregular por monto
-- que entidades tienen mayor porcentaje irregular por cantidad de deudores
-- cuanto credito total e irregular concentra cada entidad
-- como se comporta una entidad puntual, por ejemplo `55333 El Nexo S.A.`
+El promedio por deudor se calcula como:
+
+```text
+monto total seleccionado de la entidad / cantidad de deudores seleccionados de la entidad
+```
+
+## Segmentos
+
+La clasificacion usada por el tablero es:
+
+- `Empresas`: CUIT con prefijo `30`, `33` o `34`
+- `Familias`: cualquier otro identificador
+- `Total`: empresas + familias
+
+No se muestra una categoria `Desconocido`. Los casos que no entran en los prefijos de empresa se incorporan a `Familias`.
+
+## Niveles de situacion
+
+El dashboard contempla todos los niveles detectados:
+
+- `0`: sin situacion / no informada
+- `1`: normal
+- `2`: seguimiento especial / riesgo bajo
+- `3`: problemas / riesgo medio
+- `4`: alto riesgo
+- `5`: irrecuperable
+- `11`: asistencias cubiertas totalmente con garantias preferidas A
+
+En la sidebar hay un checklist de niveles. Si esta activo **Todos los niveles**, los KPIs muestran el total del segmento. Si se desactiva, se pueden elegir niveles especificos y todo se recalcula con esa seleccion.
+
+Por defecto, al desactivar "Todos los niveles", quedan seleccionados los niveles `2`, `3`, `4` y `5`, que son la vista clasica de morosidad.
 
 ## Que significa "minimo deudores"
 
-El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores en el segmento seleccionado.
+El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores dentro de los niveles seleccionados.
 
-Ejemplo: si el segmento es `Familias` y el minimo es `1.000`, el tablero solo muestra entidades con al menos 1.000 deudores familiares.
+Ejemplo: si el segmento es `Familias`, los niveles seleccionados son `2-5` y el minimo es `1.000`, el tablero solo muestra entidades con al menos 1.000 deudores familiares en esos niveles.
 
-La razon del filtro es evitar que casos muy chicos distorsionen el ranking. Una entidad con pocos deudores puede mostrar un porcentaje de mora muy alto, pero no ser relevante en volumen.
+La razon del filtro es evitar que casos chicos distorsionen rankings, porcentajes y promedios.
 
-## Datos
+## Datos incluidos
 
 La app usa datos agregados livianos:
 
-- `data/morosidad_entidad_202604.csv`
-- `data/top_morosidad_familias_202604.csv`
+- `data/morosidad_niveles_202604.csv`
+- `data/manifest_morosidad_niveles_202604.json`
 
-No usa el TXT bruto de 40M+ filas. Ese archivo queda como fuente primaria/procesamiento, no como insumo directo del dashboard.
+El CSV principal contiene:
 
-El CSV principal contiene, entre otros campos:
+- periodo
+- codigo y nombre de entidad
+- sector: financiero / no financiero
+- segmento: familias / empresas / total
+- nivel de situacion
+- cantidad de deudores
+- monto total en miles de pesos
+- monto promedio por deudor en miles de pesos
+- porcentaje de deudores y monto dentro del segmento
+- cantidad de registros fuente usados para el agregado
 
-- deudores totales
-- deudores irregulares
-- porcentaje irregular por cantidad
-- credito total en miles de pesos
-- credito irregular en miles de pesos
-- porcentaje irregular por monto
-- cantidad de registros por situacion BCRA
+No se incluye el TXT bruto de 40M+ filas.
+
+## Procesamiento reproducible
+
+El codigo de procesamiento esta en:
+
+- `scripts/build_streamlit_level_metrics.py`
+- `scripts/build_bcra_deudores.py`
+
+Uso esperado desde una carpeta que contenga los archivos fuente BCRA:
+
+```bash
+python scripts/build_streamlit_level_metrics.py \
+  --input-dir /ruta/a/202604 \
+  --output-dir /ruta/de/salida \
+  --period 202604
+```
+
+El script espera encontrar:
+
+- `deudores.txt`
+- `Maeent.txt`
 
 ## Correr localmente
 
@@ -82,16 +130,3 @@ streamlit run app.py
    - Branch: `main`
    - Main file path: `app.py`
 5. Deploy.
-
-## Definicion resumida de morosidad
-
-Se considera irregular:
-
-- Situacion 2
-- Situacion 3
-- Situacion 4
-- Situacion 5
-
-La situacion 1 se considera normal.
-
-La situacion 11 se muestra separada como cubierta, segun el PDF de especificacion BCRA.
