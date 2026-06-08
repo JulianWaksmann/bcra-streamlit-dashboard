@@ -58,9 +58,8 @@ Esta regla esta implementada en `scripts/build_streamlit_level_metrics.py`.
 
 ## Niveles de situacion
 
-El dashboard contempla todos los niveles detectados:
+El dashboard contempla los niveles detectados en el periodo `202604`:
 
-- `0`: sin situacion / no informada
 - `1`: normal
 - `2`: seguimiento especial / riesgo bajo
 - `3`: problemas / riesgo medio

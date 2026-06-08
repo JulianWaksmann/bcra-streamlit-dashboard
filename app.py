@@ -13,7 +13,6 @@ DATA_PATH = APP_DIR / "data" / "morosidad_niveles_202604.csv"
 PERIOD_LABEL = "Abril 2026"
 
 LEVEL_LABELS = {
-    "0": "0 - Sin situacion",
     "1": "1 - Normal",
     "2": "2 - Seguimiento especial",
     "3": "3 - Problemas",
@@ -21,7 +20,7 @@ LEVEL_LABELS = {
     "5": "5 - Irrecuperable",
     "11": "11 - Cubierta garantia A",
 }
-LEVEL_ORDER = ["0", "1", "2", "3", "4", "5", "11"]
+LEVEL_ORDER = ["1", "2", "3", "4", "5", "11"]
 
 
 st.set_page_config(
