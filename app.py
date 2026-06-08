@@ -143,6 +143,22 @@ CSS = """
     div[data-baseweb="select"] input {
         caret-color: transparent !important;
     }
+
+    .help-dot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.9rem;
+        height: 0.9rem;
+        margin-left: 0.25rem;
+        border: 1px solid #9aa3b2;
+        border-radius: 999px;
+        color: #9aa3b2;
+        cursor: help;
+        font-size: 0.68rem;
+        font-weight: 700;
+        line-height: 1;
+    }
 </style>
 """
 
@@ -273,7 +289,7 @@ with st.sidebar:
         """
         <div style="font-size:0.875rem; margin-bottom:0.35rem;">
             Niveles de situacion
-            <span title="Los KPIs, rankings y montos se recalculan con los niveles marcados." style="cursor:help; color:#9aa3b2;">?</span>
+            <span class="help-dot" title="Los KPIs, rankings y montos se recalculan con los niveles marcados.">?</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -374,47 +390,84 @@ top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
 top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
 
 with left:
-    st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
-    st.caption("Toca una barra para filtrar automaticamente esa entidad.")
-    fig_rank = px.bar(
-        top.sort_values(rank_metric),
-        x=rank_metric,
-        y="nombre_corto",
-        orientation="h",
-        color=rank_metric,
-        color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
-        labels={
-            "nombre_corto": "",
-            "monto_total_miles_pesos": "monto total (miles $)",
-            "deudores": "deudores",
-            "monto_promedio_pesos": "monto promedio ($)",
-        },
-        hover_data={
-            "codigo_entidad": True,
-            "nombre_entidad": True,
-            "deudores": ":,.0f",
-            "monto_total_miles_pesos": ":,.0f",
-            "monto_promedio_pesos": ":,.0f",
-            "nombre_corto": False,
-        },
-        custom_data=["entidad"],
-    )
-    fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
-    fig_rank.update_layout(coloraxis_showscale=False)
-    rank_event = st.plotly_chart(
-        base_layout(fig_rank, height=520),
-        width="stretch",
-        key="ranking_entidades",
-        on_select="rerun",
-        selection_mode="points",
-    )
-    selection = getattr(rank_event, "selection", None)
-    selected_points = selection.get("points", []) if selection else []
-    if selected_points:
-        clicked_entity = selected_points[0].get("customdata", [None])[0]
-        if clicked_entity and clicked_entity != st.session_state.get("selected_entity"):
-            st.session_state["pending_entity"] = clicked_entity
-            st.rerun()
+    if selected_entity == "Todas":
+        st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
+        st.caption("Toca una barra para filtrar automaticamente esa entidad.")
+        fig_rank = px.bar(
+            top.sort_values(rank_metric),
+            x=rank_metric,
+            y="nombre_corto",
+            orientation="h",
+            color=rank_metric,
+            color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
+            labels={
+                "nombre_corto": "",
+                "monto_total_miles_pesos": "monto total (miles $)",
+                "deudores": "deudores",
+                "monto_promedio_pesos": "monto promedio ($)",
+            },
+            hover_data={
+                "codigo_entidad": True,
+                "nombre_entidad": True,
+                "deudores": ":,.0f",
+                "monto_total_miles_pesos": ":,.0f",
+                "monto_promedio_pesos": ":,.0f",
+                "nombre_corto": False,
+            },
+            custom_data=["entidad"],
+        )
+        fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
+        fig_rank.update_layout(coloraxis_showscale=False)
+        rank_event = st.plotly_chart(
+            base_layout(fig_rank, height=520),
+            width="stretch",
+            key="ranking_entidades",
+            on_select="rerun",
+            selection_mode="points",
+        )
+        selection = getattr(rank_event, "selection", None)
+        selected_points = selection.get("points", []) if selection else []
+        if selected_points:
+            clicked_entity = selected_points[0].get("customdata", [None])[0]
+            if clicked_entity and clicked_entity != st.session_state.get("selected_entity"):
+                st.session_state["pending_entity"] = clicked_entity
+                st.rerun()
+    else:
+        st.markdown('<div class="section-title">Perfil por nivel de la entidad</div>', unsafe_allow_html=True)
+        st.caption("Distribucion de la entidad seleccionada para los niveles marcados.")
+        level_profile = selected_rows.sort_values(
+            "situacion_codigo",
+            key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}),
+        ).copy()
+        fig_profile = px.bar(
+            level_profile,
+            x="nivel",
+            y=rank_metric,
+            color="situacion_codigo",
+            color_discrete_map={
+                "1": "#58d68d",
+                "2": "#4c8dff",
+                "3": "#f2b84b",
+                "4": "#ff8d4c",
+                "5": "#ff5c68",
+                "11": "#7f8cff",
+            },
+            labels={
+                "nivel": "",
+                "monto_total_miles_pesos": "monto total (miles $)",
+                "deudores": "deudores",
+                "monto_promedio_pesos": "monto promedio ($)",
+            },
+            hover_data={
+                "deudores": ":,.0f",
+                "monto_total_miles_pesos": ":,.0f",
+                "monto_promedio_pesos": ":,.0f",
+                "situacion_codigo": False,
+            },
+        )
+        fig_profile.update_traces(marker_line_width=0, hovertemplate=None)
+        fig_profile.update_layout(coloraxis_showscale=False, showlegend=False)
+        st.plotly_chart(base_layout(fig_profile, height=520), width="stretch")
 
 with right:
     st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
