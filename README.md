@@ -68,9 +68,15 @@ El dashboard contempla todos los niveles detectados:
 - `5`: irrecuperable
 - `11`: asistencias cubiertas totalmente con garantias preferidas A
 
-En la sidebar hay un checklist de niveles. Si esta activo **Todos los niveles**, los KPIs muestran el total del segmento. Si se desactiva, se pueden elegir niveles especificos y todo se recalcula con esa seleccion.
+En la sidebar hay un checklist de niveles. Los KPIs, rankings y graficos se recalculan con los niveles marcados.
 
-Por defecto, al desactivar "Todos los niveles", quedan seleccionados los niveles `2`, `3`, `4` y `5`, que son la vista clasica de morosidad.
+Si se quieren ver todos los niveles, se deben marcar todos individualmente. Si se quiere la vista clasica de morosidad, se dejan marcados solo los niveles `2`, `3`, `4` y `5`.
+
+## Promedio por deudor
+
+El promedio por deudor no tiene que subir necesariamente cuando sube el nivel de situacion. La situacion BCRA refleja riesgo o comportamiento de pago, no tamano de deuda.
+
+Por ejemplo, en `Familias` puede ocurrir que el nivel `2` tenga mayor monto promedio que el nivel `4` porque los deudores de nivel `2` concentran montos mas grandes, aunque esten en una situacion menos grave.
 
 ## Que significa "minimo deudores"
 

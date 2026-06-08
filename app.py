@@ -22,7 +22,6 @@ LEVEL_LABELS = {
     "11": "11 - Cubierta garantia A",
 }
 LEVEL_ORDER = ["0", "1", "2", "3", "4", "5", "11"]
-RISK_LEVELS = {"2", "3", "4", "5"}
 
 
 st.set_page_config(
@@ -181,6 +180,10 @@ def fmt_money_miles(value: float) -> str:
     return f"{compact_number(value)} miles $"
 
 
+def fmt_money_from_miles(value: float) -> str:
+    return f"{compact_number(float(value) * 1_000)} $"
+
+
 def weighted_pct(numerator: float, denominator: float) -> float:
     return 0.0 if denominator == 0 else numerator / denominator * 100
 
@@ -245,22 +248,16 @@ with st.sidebar:
     selected_segment = st.radio("Segmento", ["Familias", "Empresas", "Total"], index=0)
 
     st.caption("Niveles de situacion")
-    all_levels = st.checkbox(
-        "Todos los niveles",
-        value=True,
-        help=(
-            "Los KPIs, rankings y montos se recalculan con los niveles seleccionados. "
-            "Si esta activo, ves el total del segmento."
-        ),
-    )
-    if all_levels:
-        selected_levels = set(LEVEL_ORDER)
-    else:
-        selected_levels = {
-            level
-            for level in LEVEL_ORDER
-            if st.checkbox(LEVEL_LABELS[level], value=level in RISK_LEVELS, key=f"level_{level}")
-        }
+    selected_levels = {
+        level
+        for level in LEVEL_ORDER
+        if st.checkbox(
+            LEVEL_LABELS[level],
+            value=True,
+            key=f"level_{level}",
+            help="Los KPIs, rankings y montos se recalculan con los niveles marcados.",
+        )
+    }
 
     sectors = ["Todos"] + sorted(df["sector"].dropna().unique().tolist())
     selected_sector = st.selectbox("Sector", sectors)
@@ -321,19 +318,14 @@ total_amount = entity_selected["monto_total_miles_pesos"].sum()
 all_level_debtors = entity_totals_all_levels["deudores"].sum()
 all_level_amount = entity_totals_all_levels["monto_total_miles_pesos"].sum()
 avg_amount = 0.0 if total_debtors == 0 else total_amount / total_debtors
-risk_rows = base[base["situacion_codigo"].isin(RISK_LEVELS)]
-risk_debtors = risk_rows["deudores"].sum()
-risk_amount = risk_rows["monto_total_miles_pesos"].sum()
 
-k1, k2, k3, k4 = st.columns(4)
+k1, k2, k3 = st.columns(3)
 with k1:
     kpi_card("Monto niveles seleccionados", fmt_money_miles(total_amount), f"{fmt_pct(weighted_pct(total_amount, all_level_amount))} del monto total")
 with k2:
     kpi_card("Deudores seleccionados", fmt_int(total_debtors), f"{fmt_pct(weighted_pct(total_debtors, all_level_debtors))} del segmento")
 with k3:
-    kpi_card("Promedio por deudor", fmt_money_miles(avg_amount), "monto dentro de cada entidad")
-with k4:
-    kpi_card("Mora 2 a 5", fmt_pct(weighted_pct(risk_amount, all_level_amount)), f"{fmt_int(risk_debtors)} deudores")
+    kpi_card("Promedio por deudor", fmt_money_from_miles(avg_amount), "monto promedio dentro de entidad")
 
 if entity_selected.empty:
     st.warning("No hay datos para los filtros seleccionados.")
@@ -379,25 +371,6 @@ with left:
     st.plotly_chart(base_layout(fig_rank, height=520), width="stretch")
 
 with right:
-    st.markdown('<div class="section-title">Foco 55333</div>', unsafe_allow_html=True)
-    el_nexo = entity_selected[entity_selected["codigo_entidad"].eq("55333")]
-    if not el_nexo.empty:
-        row = el_nexo.iloc[0]
-        st.markdown(
-            f"""
-            <div class="callout">
-                <strong>{row["nombre_entidad"]}</strong><br>
-                Sector: {row["sector"]} · Tipo: {row["tipo_segmento"]}<br><br>
-                Monto seleccionado: <strong>{fmt_money_miles(row["monto_total_miles_pesos"])}</strong><br>
-                Deudores seleccionados: <strong>{fmt_int(row["deudores"])}</strong><br>
-                Promedio por deudor: <strong>{fmt_money_miles(row["monto_promedio_miles_pesos"])}</strong>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("El Nexo no aparece con los filtros actuales.")
-
     st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
     level_totals = (
         selected_rows.groupby(["situacion_codigo", "nivel"], as_index=False)
