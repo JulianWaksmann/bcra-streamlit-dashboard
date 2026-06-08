@@ -47,6 +47,15 @@ La clasificacion usada por el tablero es:
 
 No se muestra una categoria `Desconocido`. Los casos que no entran en los prefijos de empresa se incorporan a `Familias`.
 
+## Sector financiero / no financiero
+
+El archivo fuente usado para el dashboard no trae un campo textual de sector. Para el tablero se infiere desde el codigo de entidad:
+
+- codigos menores a `50000`: `Financiero`
+- codigos mayores o iguales a `50000`: `No Financiero`
+
+Esta regla esta implementada en `scripts/build_streamlit_level_metrics.py`.
+
 ## Niveles de situacion
 
 El dashboard contempla todos los niveles detectados:
@@ -65,11 +74,11 @@ Por defecto, al desactivar "Todos los niveles", quedan seleccionados los niveles
 
 ## Que significa "minimo deudores"
 
-El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores dentro de los niveles seleccionados.
+El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores dentro de los niveles seleccionados. Aplica cuando el selector de entidad esta en `Todas`.
 
 Ejemplo: si el segmento es `Familias`, los niveles seleccionados son `2-5` y el minimo es `1.000`, el tablero solo muestra entidades con al menos 1.000 deudores familiares en esos niveles.
 
-La razon del filtro es evitar que casos chicos distorsionen rankings, porcentajes y promedios.
+La razon del filtro es evitar que casos chicos distorsionen rankings, porcentajes y promedios. Si se elige una entidad puntual, el minimo no se aplica para que esa entidad no desaparezca por tener poco volumen.
 
 ## Datos incluidos
 

@@ -41,6 +41,8 @@ def load_entities(input_dir: Path) -> dict[str, str]:
 
 
 def sector_for_entity(code: str) -> str:
+    # BCRA entity codes below 50000 are treated as financial entities; 50000+
+    # are treated as non-financial informants for this dashboard.
     try:
         return "No Financiero" if int(code) >= 50000 else "Financiero"
     except ValueError:

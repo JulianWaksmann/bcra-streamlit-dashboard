@@ -265,6 +265,16 @@ with st.sidebar:
     sectors = ["Todos"] + sorted(df["sector"].dropna().unique().tolist())
     selected_sector = st.selectbox("Sector", sectors)
 
+    entity_scope = df[df["tipo_segmento"].eq(selected_segment)].copy()
+    if selected_sector != "Todos":
+        entity_scope = entity_scope[entity_scope["sector"].eq(selected_sector)]
+    entity_options = ["Todas"] + sorted(entity_scope["entidad"].dropna().unique().tolist())
+    selected_entity = st.selectbox(
+        "Entidad",
+        entity_options,
+        help="Filtra una entidad puntual. Las opciones se ajustan al segmento y sector seleccionados.",
+    )
+
     min_debtors = st.slider(
         "Minimo deudores por entidad",
         0,
@@ -272,12 +282,10 @@ with st.sidebar:
         1_000,
         step=1_000,
         help=(
-            "Filtra entidades con al menos esta cantidad de deudores dentro de los niveles seleccionados. "
-            "Sirve para sacar casos chicos que distorsionan porcentajes y promedios."
+            "Cuando Entidad esta en Todas, filtra entidades con al menos esta cantidad de deudores "
+            "dentro de los niveles seleccionados. Sirve para sacar casos chicos que distorsionan rankings."
         ),
     )
-
-    search = st.text_input("Buscar entidad", placeholder="Ej. UALA, Nexo, Galicia...")
 
     metric_mode = st.segmented_control(
         "Ranking",
@@ -292,15 +300,14 @@ if not selected_levels:
 base = df[df["tipo_segmento"].eq(selected_segment)].copy()
 if selected_sector != "Todos":
     base = base[base["sector"].eq(selected_sector)]
-if search.strip():
-    needle = search.strip().casefold()
-    base = base[base["entidad"].str.casefold().str.contains(needle, regex=False)]
+if selected_entity != "Todas":
+    base = base[base["entidad"].eq(selected_entity)]
 
 selected_rows = base[base["situacion_codigo"].isin(selected_levels)].copy()
 entity_totals_all_levels = aggregate_entities(base)
 entity_selected = aggregate_entities(selected_rows)
 
-if min_debtors:
+if min_debtors and selected_entity == "Todas":
     entity_selected = entity_selected[entity_selected["deudores"].ge(min_debtors)]
     selected_entity_codes = set(entity_selected["codigo_entidad"])
     selected_rows = selected_rows[selected_rows["codigo_entidad"].isin(selected_entity_codes)]
