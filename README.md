@@ -77,6 +77,12 @@ El promedio por deudor no tiene que subir necesariamente cuando sube el nivel de
 
 Por ejemplo, en `Familias` puede ocurrir que el nivel `2` tenga mayor monto promedio que el nivel `4` porque los deudores de nivel `2` concentran montos mas grandes, aunque esten en una situacion menos grave.
 
+En la tabla de detalle el promedio se muestra en pesos estimados. El monto total se mantiene en miles de pesos porque asi viene informado en la fuente.
+
+## Interaccion del ranking
+
+El ranking por niveles seleccionados es interactivo. Al tocar una barra, el selector `Entidad` se actualiza automaticamente con esa entidad y todo el tablero queda filtrado a ella.
+
 ## Que significa "minimo deudores"
 
 El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores dentro de los niveles seleccionados. Aplica cuando el selector de entidad esta en `Todas`.

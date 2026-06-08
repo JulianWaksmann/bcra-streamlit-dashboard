@@ -152,6 +152,7 @@ def load_data() -> pd.DataFrame:
     df["situacion_codigo"] = df["situacion_codigo"].replace({"nan": "0", "": "0"}).fillna("0")
     df["entidad"] = df["codigo_entidad"] + " · " + df["nombre_entidad"]
     df["nivel"] = df["situacion_codigo"].map(LEVEL_LABELS).fillna(df["situacion_codigo"])
+    df["monto_promedio_pesos"] = df["monto_promedio_miles_pesos"] * 1_000
     return df
 
 
@@ -226,6 +227,7 @@ def aggregate_entities(df: pd.DataFrame) -> pd.DataFrame:
     grouped["monto_promedio_miles_pesos"] = (
         grouped["monto_total_miles_pesos"] / grouped["deudores"].replace(0, pd.NA)
     ).fillna(0)
+    grouped["monto_promedio_pesos"] = grouped["monto_promedio_miles_pesos"] * 1_000
     grouped["entidad"] = grouped["codigo_entidad"] + " · " + grouped["nombre_entidad"]
     return grouped
 
@@ -273,9 +275,15 @@ with st.sidebar:
     if selected_sector != "Todos":
         entity_scope = entity_scope[entity_scope["sector"].eq(selected_sector)]
     entity_options = ["Todas"] + sorted(entity_scope["entidad"].dropna().unique().tolist())
+    pending_entity = st.session_state.pop("pending_entity", None)
+    if pending_entity in entity_options:
+        st.session_state["selected_entity"] = pending_entity
+    elif st.session_state.get("selected_entity", "Todas") not in entity_options:
+        st.session_state["selected_entity"] = "Todas"
     selected_entity = st.selectbox(
         "Entidad",
         entity_options,
+        key="selected_entity",
         help="Filtra una entidad puntual. Las opciones se ajustan al segmento y sector seleccionados.",
     )
 
@@ -343,7 +351,7 @@ left, right = st.columns([2.05, 1])
 rank_metric = {
     "monto total": "monto_total_miles_pesos",
     "cantidad deudores": "deudores",
-    "monto promedio": "monto_promedio_miles_pesos",
+    "monto promedio": "monto_promedio_pesos",
 }[metric_mode]
 
 top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
@@ -351,6 +359,7 @@ top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
 
 with left:
     st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
+    st.caption("Toca una barra para filtrar automaticamente esa entidad.")
     fig_rank = px.bar(
         top.sort_values(rank_metric),
         x=rank_metric,
@@ -362,20 +371,34 @@ with left:
             "nombre_corto": "",
             "monto_total_miles_pesos": "monto total (miles $)",
             "deudores": "deudores",
-            "monto_promedio_miles_pesos": "monto promedio (miles $)",
+            "monto_promedio_pesos": "monto promedio ($)",
         },
         hover_data={
             "codigo_entidad": True,
             "nombre_entidad": True,
             "deudores": ":,.0f",
             "monto_total_miles_pesos": ":,.0f",
-            "monto_promedio_miles_pesos": ":,.1f",
+            "monto_promedio_pesos": ":,.0f",
             "nombre_corto": False,
         },
+        custom_data=["entidad"],
     )
     fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
     fig_rank.update_layout(coloraxis_showscale=False)
-    st.plotly_chart(base_layout(fig_rank, height=520), width="stretch")
+    rank_event = st.plotly_chart(
+        base_layout(fig_rank, height=520),
+        width="stretch",
+        key="ranking_entidades",
+        on_select="rerun",
+        selection_mode="points",
+    )
+    selection = getattr(rank_event, "selection", None)
+    selected_points = selection.get("points", []) if selection else []
+    if selected_points:
+        clicked_entity = selected_points[0].get("customdata", [None])[0]
+        if clicked_entity and clicked_entity != st.session_state.get("selected_entity"):
+            st.session_state["pending_entity"] = clicked_entity
+            st.rerun()
 
 with right:
     st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
@@ -409,7 +432,7 @@ scatter_source["bubble_size"] = scatter_source["monto_total_miles_pesos"].clip(l
 fig_scatter = px.scatter(
     scatter_source,
     x="deudores",
-    y="monto_promedio_miles_pesos",
+    y="monto_promedio_pesos",
     size="bubble_size",
     color="sector",
     hover_name="nombre_entidad",
@@ -417,12 +440,12 @@ fig_scatter = px.scatter(
         "codigo_entidad": True,
         "deudores": ":,.0f",
         "monto_total_miles_pesos": ":,.0f",
-        "monto_promedio_miles_pesos": ":,.1f",
+        "monto_promedio_pesos": ":,.0f",
         "bubble_size": False,
     },
     labels={
         "deudores": "deudores en niveles seleccionados",
-        "monto_promedio_miles_pesos": "monto promedio por deudor (miles $)",
+        "monto_promedio_pesos": "monto promedio por deudor ($)",
     },
     color_discrete_map={"Financiero": "#4c8dff", "No Financiero": "#ff5c68"},
 )
@@ -434,15 +457,13 @@ st.markdown('<div class="section-title">Detalle por entidad y nivel</div>', unsa
 detail = selected_rows.sort_values(["codigo_entidad", "situacion_codigo"])[
     [
         "codigo_entidad",
-        "nombre_entidad",
-        "sector",
-        "tipo_segmento",
         "nivel",
         "deudores",
+        "monto_promedio_pesos",
         "monto_total_miles_pesos",
-        "monto_promedio_miles_pesos",
         "pct_deudores_segmento",
         "pct_monto_segmento",
+        "nombre_entidad",
     ]
 ]
 
@@ -451,9 +472,10 @@ st.dataframe(
     width="stretch",
     hide_index=True,
     column_config={
+        "codigo_entidad": "codigo",
         "nivel": "nivel situacion",
+        "monto_promedio_pesos": st.column_config.NumberColumn("promedio $", format="%.0f"),
         "monto_total_miles_pesos": st.column_config.NumberColumn("monto total miles $", format="%.0f"),
-        "monto_promedio_miles_pesos": st.column_config.NumberColumn("promedio miles $", format="%.1f"),
         "pct_deudores_segmento": st.column_config.NumberColumn("% deudores segmento", format="%.2f%%"),
         "pct_monto_segmento": st.column_config.NumberColumn("% monto segmento", format="%.2f%%"),
     },
