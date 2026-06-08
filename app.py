@@ -130,6 +130,19 @@ CSS = """
         border-radius: 8px;
         overflow: hidden;
     }
+
+    div[data-baseweb="select"],
+    div[data-baseweb="select"] *,
+    div[role="radiogroup"] label,
+    div[role="radiogroup"] label *,
+    label[data-baseweb="checkbox"],
+    label[data-baseweb="checkbox"] * {
+        cursor: pointer !important;
+    }
+
+    div[data-baseweb="select"] input {
+        caret-color: transparent !important;
+    }
 </style>
 """
 
