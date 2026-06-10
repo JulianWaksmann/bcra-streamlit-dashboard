@@ -373,12 +373,6 @@ with st.sidebar:
         ),
     )
 
-    metric_mode = st.segmented_control(
-        "Ranking",
-        options=["monto total", "cantidad deudores", "monto promedio"],
-        default="monto total",
-    )
-
 if not selected_levels:
     st.warning("Selecciona al menos un nivel de situacion.")
     st.stop()
@@ -408,28 +402,32 @@ all_level_debtors = entity_totals_all_levels["deudores"].sum()
 all_level_amount = entity_totals_all_levels["monto_total_miles_pesos"].sum()
 avg_amount = 0.0 if total_debtors == 0 else total_amount / total_debtors
 
-k1, k2, k3 = st.columns(3)
-with k1:
-    kpi_card("Monto niveles seleccionados", fmt_money_miles(total_amount), f"{fmt_pct(weighted_pct(total_amount, all_level_amount))} del monto total")
-with k2:
-    kpi_card("Deudores seleccionados", fmt_int(total_debtors), f"{fmt_pct(weighted_pct(total_debtors, all_level_debtors))} del segmento")
-with k3:
-    kpi_card("Promedio por deudor", fmt_money_from_miles(avg_amount), "monto promedio dentro de entidad")
+distribution_tab, rankings_tab = st.tabs(["Distribucion por niveles en entidades", "Rankings"])
 
-if entity_selected.empty:
-    st.warning("No hay datos para los filtros seleccionados.")
-    st.stop()
+with distribution_tab:
+    k1, k2, k3 = st.columns(3)
+    with k1:
+        kpi_card(
+            "Monto niveles seleccionados",
+            fmt_money_miles(total_amount),
+            f"{fmt_pct(weighted_pct(total_amount, all_level_amount))} del monto total",
+        )
+    with k2:
+        kpi_card(
+            "Deudores seleccionados",
+            fmt_int(total_debtors),
+            f"{fmt_pct(weighted_pct(total_debtors, all_level_debtors))} del segmento",
+        )
+    with k3:
+        kpi_card("Promedio por deudor", fmt_money_from_miles(avg_amount), "monto promedio dentro de entidad")
 
-explorer_tab, rankings_tab = st.tabs(["Explorador", "Rankings"])
+    if entity_selected.empty:
+        st.warning("No hay datos para los filtros seleccionados.")
+        st.stop()
 
-with explorer_tab:
     left, right = st.columns([2.05, 1])
 
-    rank_metric = {
-        "monto total": "monto_total_miles_pesos",
-        "cantidad deudores": "deudores",
-        "monto promedio": "monto_promedio_pesos",
-    }[metric_mode]
+    rank_metric = "monto_total_miles_pesos"
 
     top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
     top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
@@ -596,7 +594,11 @@ with explorer_tab:
 
 with rankings_tab:
     st.markdown('<div class="section-title">Rankings de entidades</div>', unsafe_allow_html=True)
-    st.caption("Tamaño de cartera usa todos los niveles. Morosidad usa niveles 2 a 5 sobre el total de cada entidad.")
+    st.caption(
+        "Tamaño cartera ordena por la cartera total de cada entidad, usando todos los niveles informados "
+        "(1, 2, 3, 4, 5 y 11). Morosidad ordena solo por niveles 2 a 5. "
+        "Los rankings por monto usan miles de pesos; los rankings por deudores usan cantidad de relaciones entidad-deudor."
+    )
 
     ranking_scope = df[df["tipo_segmento"].eq(selected_segment)].copy()
     if selected_sector != "Todos":
@@ -608,8 +610,6 @@ with rankings_tab:
     ranking_options = {
         "Tamaño cartera: monto": ("monto_total_cartera_miles", "monto total cartera (miles $)", fmt_money_miles),
         "Tamaño cartera: deudores": ("deudores_total", "deudores totales", fmt_int),
-        "Morosidad: % monto": ("pct_monto_moroso", "% monto moroso", fmt_pct),
-        "Morosidad: % deudores": ("pct_deudores_morosos", "% deudores morosos", fmt_pct),
         "Morosidad: monto": ("monto_moroso_miles", "monto moroso (miles $)", fmt_money_miles),
         "Morosidad: deudores": ("deudores_morosos", "deudores morosos", fmt_int),
     }
@@ -619,7 +619,7 @@ with rankings_tab:
         default="Tamaño cartera: monto",
         key="rankings_orden",
     )
-    ranking_metric, ranking_axis, ranking_formatter = ranking_options[selected_ranking]
+    ranking_metric, ranking_axis, _ranking_formatter = ranking_options[selected_ranking]
     ranking_top = ranking.sort_values(ranking_metric, ascending=False).head(20).copy()
 
     r1, r2, r3 = st.columns(3)

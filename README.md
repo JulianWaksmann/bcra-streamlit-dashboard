@@ -67,7 +67,7 @@ El dashboard contempla los niveles detectados en el periodo `202604`:
 - `5`: irrecuperable
 - `11`: asistencias cubiertas totalmente con garantias preferidas A
 
-En la sidebar hay un checklist de niveles. Los KPIs, rankings y graficos se recalculan con los niveles marcados.
+En la sidebar hay un checklist de niveles. Los KPIs y graficos de la pestaña de distribucion se recalculan con los niveles marcados.
 
 Si se quieren ver todos los niveles, se deben marcar todos individualmente. Si se quiere la vista clasica de morosidad, se dejan marcados solo los niveles `2`, `3`, `4` y `5`.
 
@@ -87,21 +87,19 @@ El ranking por niveles seleccionados es interactivo. Al tocar una barra, el sele
 
 La app tiene dos pestañas principales:
 
-- `Explorador`: mantiene la vista interactiva original con filtros, ranking contextual, perfil por entidad, distribucion por nivel, mapa cantidad/promedio y detalle descargable.
+- `Distribucion por niveles en entidades`: mantiene la vista interactiva original con filtros, ranking contextual, perfil por entidad, distribucion por nivel, mapa cantidad/promedio y detalle descargable.
 - `Rankings`: compara entidades entre si con rankings especificos.
 
-En `Rankings`, el tamaño de cartera se calcula con todos los niveles de situacion. La morosidad se calcula con niveles `2`, `3`, `4` y `5` sobre el total de cada entidad.
+En `Rankings`, el tamaño de cartera se calcula con todos los niveles de situacion disponibles (`1`, `2`, `3`, `4`, `5` y `11`). La morosidad se calcula con niveles `2`, `3`, `4` y `5` sobre el total de cada entidad.
 
 Rankings disponibles:
 
 - tamaño de cartera por monto
 - tamaño de cartera por cantidad de deudores
-- morosidad por porcentaje de monto
-- morosidad por porcentaje de deudores
 - morosidad por monto absoluto
 - morosidad por cantidad absoluta de deudores
 
-La pestaña `Rankings` respeta `Segmento`, `Sector` y `Minimo deudores por entidad`, pero compara todas las entidades aunque en el selector `Entidad` haya una entidad puntual elegida para el explorador.
+La pestaña `Rankings` respeta `Segmento`, `Sector` y `Minimo deudores por entidad`, pero compara todas las entidades aunque en el selector `Entidad` haya una entidad puntual elegida para la pestaña de distribucion.
 
 ## Que significa "minimo deudores"
 
