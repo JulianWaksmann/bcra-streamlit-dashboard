@@ -83,6 +83,26 @@ En la tabla de detalle el promedio se muestra en pesos estimados. El monto total
 
 El ranking por niveles seleccionados es interactivo. Al tocar una barra, el selector `Entidad` se actualiza automaticamente con esa entidad y todo el tablero queda filtrado a ella.
 
+## Pestañas
+
+La app tiene dos pestañas principales:
+
+- `Explorador`: mantiene la vista interactiva original con filtros, ranking contextual, perfil por entidad, distribucion por nivel, mapa cantidad/promedio y detalle descargable.
+- `Rankings`: compara entidades entre si con rankings especificos.
+
+En `Rankings`, el tamaño de cartera se calcula con todos los niveles de situacion. La morosidad se calcula con niveles `2`, `3`, `4` y `5` sobre el total de cada entidad.
+
+Rankings disponibles:
+
+- tamaño de cartera por monto
+- tamaño de cartera por cantidad de deudores
+- morosidad por porcentaje de monto
+- morosidad por porcentaje de deudores
+- morosidad por monto absoluto
+- morosidad por cantidad absoluta de deudores
+
+La pestaña `Rankings` respeta `Segmento`, `Sector` y `Minimo deudores por entidad`, pero compara todas las entidades aunque en el selector `Entidad` haya una entidad puntual elegida para el explorador.
+
 ## Que significa "minimo deudores"
 
 El filtro **Minimo deudores por entidad** elimina del ranking las entidades que tienen menos de esa cantidad de deudores dentro de los niveles seleccionados. Aplica cuando el selector de entidad esta en `Todas`.

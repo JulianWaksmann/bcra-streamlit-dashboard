@@ -261,6 +261,48 @@ def aggregate_entities(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
+def build_rankings(scope: pd.DataFrame) -> pd.DataFrame:
+    total = aggregate_entities(scope).rename(
+        columns={
+            "deudores": "deudores_total",
+            "monto_total_miles_pesos": "monto_total_cartera_miles",
+            "monto_promedio_pesos": "monto_promedio_total_pesos",
+        }
+    )
+    morosa = aggregate_entities(scope[scope["situacion_codigo"].isin({"2", "3", "4", "5"})]).rename(
+        columns={
+            "deudores": "deudores_morosos",
+            "monto_total_miles_pesos": "monto_moroso_miles",
+            "monto_promedio_pesos": "monto_promedio_moroso_pesos",
+        }
+    )
+    ranking = total.merge(
+        morosa[
+            [
+                "codigo_entidad",
+                "tipo_segmento",
+                "deudores_morosos",
+                "monto_moroso_miles",
+                "monto_promedio_moroso_pesos",
+            ]
+        ],
+        on=["codigo_entidad", "tipo_segmento"],
+        how="left",
+    )
+    for col in ["deudores_morosos", "monto_moroso_miles", "monto_promedio_moroso_pesos"]:
+        ranking[col] = ranking[col].fillna(0)
+    ranking["pct_monto_moroso"] = ranking.apply(
+        lambda row: weighted_pct(row["monto_moroso_miles"], row["monto_total_cartera_miles"]),
+        axis=1,
+    )
+    ranking["pct_deudores_morosos"] = ranking.apply(
+        lambda row: weighted_pct(row["deudores_morosos"], row["deudores_total"]),
+        axis=1,
+    )
+    ranking["nombre_corto"] = ranking["nombre_entidad"].str.slice(0, 34)
+    return ranking
+
+
 df = load_data()
 
 st.markdown(
@@ -378,71 +420,112 @@ if entity_selected.empty:
     st.warning("No hay datos para los filtros seleccionados.")
     st.stop()
 
-left, right = st.columns([2.05, 1])
+explorer_tab, rankings_tab = st.tabs(["Explorador", "Rankings"])
 
-rank_metric = {
-    "monto total": "monto_total_miles_pesos",
-    "cantidad deudores": "deudores",
-    "monto promedio": "monto_promedio_pesos",
-}[metric_mode]
+with explorer_tab:
+    left, right = st.columns([2.05, 1])
 
-top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
-top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
+    rank_metric = {
+        "monto total": "monto_total_miles_pesos",
+        "cantidad deudores": "deudores",
+        "monto promedio": "monto_promedio_pesos",
+    }[metric_mode]
 
-with left:
-    if selected_entity == "Todas":
-        st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
-        st.caption("Toca una barra para filtrar automaticamente esa entidad.")
-        fig_rank = px.bar(
-            top.sort_values(rank_metric),
-            x=rank_metric,
-            y="nombre_corto",
-            orientation="h",
-            color=rank_metric,
-            color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
-            labels={
-                "nombre_corto": "",
-                "monto_total_miles_pesos": "monto total (miles $)",
-                "deudores": "deudores",
-                "monto_promedio_pesos": "monto promedio ($)",
-            },
-            hover_data={
-                "codigo_entidad": True,
-                "nombre_entidad": True,
-                "deudores": ":,.0f",
-                "monto_total_miles_pesos": ":,.0f",
-                "monto_promedio_pesos": ":,.0f",
-                "nombre_corto": False,
-            },
-            custom_data=["entidad"],
+    top = entity_selected.sort_values(rank_metric, ascending=False).head(15).copy()
+    top["nombre_corto"] = top["nombre_entidad"].str.slice(0, 34)
+
+    with left:
+        if selected_entity == "Todas":
+            st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
+            st.caption("Toca una barra para filtrar automaticamente esa entidad.")
+            fig_rank = px.bar(
+                top.sort_values(rank_metric),
+                x=rank_metric,
+                y="nombre_corto",
+                orientation="h",
+                color=rank_metric,
+                color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
+                labels={
+                    "nombre_corto": "",
+                    "monto_total_miles_pesos": "monto total (miles $)",
+                    "deudores": "deudores",
+                    "monto_promedio_pesos": "monto promedio ($)",
+                },
+                hover_data={
+                    "codigo_entidad": True,
+                    "nombre_entidad": True,
+                    "deudores": ":,.0f",
+                    "monto_total_miles_pesos": ":,.0f",
+                    "monto_promedio_pesos": ":,.0f",
+                    "nombre_corto": False,
+                },
+                custom_data=["entidad"],
+            )
+            fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
+            fig_rank.update_layout(coloraxis_showscale=False, dragmode=False)
+            rank_event = st.plotly_chart(
+                base_layout(fig_rank, height=520),
+                width="stretch",
+                key="ranking_entidades",
+                on_select="rerun",
+                selection_mode="points",
+            )
+            selection = getattr(rank_event, "selection", None)
+            selected_points = selection.get("points", []) if selection else []
+            if selected_points:
+                clicked_entity = selected_points[0].get("customdata", [None])[0]
+                if clicked_entity and clicked_entity != st.session_state.get("selected_entity"):
+                    st.session_state["pending_entity"] = clicked_entity
+                    st.rerun()
+        else:
+            st.markdown('<div class="section-title">Perfil por nivel de la entidad</div>', unsafe_allow_html=True)
+            st.caption("Distribucion de la entidad seleccionada para los niveles marcados.")
+            level_profile = selected_rows.sort_values(
+                "situacion_codigo",
+                key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}),
+            ).copy()
+            fig_profile = px.bar(
+                level_profile,
+                x="nivel",
+                y=rank_metric,
+                color="situacion_codigo",
+                color_discrete_map={
+                    "1": "#58d68d",
+                    "2": "#4c8dff",
+                    "3": "#f2b84b",
+                    "4": "#ff8d4c",
+                    "5": "#ff5c68",
+                    "11": "#7f8cff",
+                },
+                labels={
+                    "nivel": "",
+                    "monto_total_miles_pesos": "monto total (miles $)",
+                    "deudores": "deudores",
+                    "monto_promedio_pesos": "monto promedio ($)",
+                },
+                hover_data={
+                    "deudores": ":,.0f",
+                    "monto_total_miles_pesos": ":,.0f",
+                    "monto_promedio_pesos": ":,.0f",
+                    "situacion_codigo": False,
+                },
+            )
+            fig_profile.update_traces(marker_line_width=0, hovertemplate=None)
+            fig_profile.update_layout(coloraxis_showscale=False, showlegend=False)
+            st.plotly_chart(base_layout(fig_profile, height=520), width="stretch")
+
+    with right:
+        st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
+        level_totals = (
+            selected_rows.groupby(["situacion_codigo", "nivel"], as_index=False)
+            .agg(deudores=("deudores", "sum"), monto_total_miles_pesos=("monto_total_miles_pesos", "sum"))
+            .sort_values("situacion_codigo", key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}))
         )
-        fig_rank.update_traces(marker_line_width=0, hovertemplate=None)
-        fig_rank.update_layout(coloraxis_showscale=False, dragmode=False)
-        rank_event = st.plotly_chart(
-            base_layout(fig_rank, height=520),
-            width="stretch",
-            key="ranking_entidades",
-            on_select="rerun",
-            selection_mode="points",
-        )
-        selection = getattr(rank_event, "selection", None)
-        selected_points = selection.get("points", []) if selection else []
-        if selected_points:
-            clicked_entity = selected_points[0].get("customdata", [None])[0]
-            if clicked_entity and clicked_entity != st.session_state.get("selected_entity"):
-                st.session_state["pending_entity"] = clicked_entity
-                st.rerun()
-    else:
-        st.markdown('<div class="section-title">Perfil por nivel de la entidad</div>', unsafe_allow_html=True)
-        st.caption("Distribucion de la entidad seleccionada para los niveles marcados.")
-        level_profile = selected_rows.sort_values(
-            "situacion_codigo",
-            key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}),
-        ).copy()
-        fig_profile = px.bar(
-            level_profile,
-            x="nivel",
-            y=rank_metric,
+        fig_donut = px.pie(
+            level_totals,
+            names="nivel",
+            values="monto_total_miles_pesos",
+            hole=0.58,
             color="situacion_codigo",
             color_discrete_map={
                 "1": "#58d68d",
@@ -452,103 +535,154 @@ with left:
                 "5": "#ff5c68",
                 "11": "#7f8cff",
             },
-            labels={
-                "nivel": "",
-                "monto_total_miles_pesos": "monto total (miles $)",
-                "deudores": "deudores",
-                "monto_promedio_pesos": "monto promedio ($)",
-            },
-            hover_data={
-                "deudores": ":,.0f",
-                "monto_total_miles_pesos": ":,.0f",
-                "monto_promedio_pesos": ":,.0f",
-                "situacion_codigo": False,
-            },
         )
-        fig_profile.update_traces(marker_line_width=0, hovertemplate=None)
-        fig_profile.update_layout(coloraxis_showscale=False, showlegend=False)
-        st.plotly_chart(base_layout(fig_profile, height=520), width="stretch")
+        fig_donut.update_traces(textposition="inside", textinfo="percent")
+        st.plotly_chart(base_layout(fig_donut, height=325), width="stretch")
 
-with right:
-    st.markdown('<div class="section-title">Distribucion por nivel</div>', unsafe_allow_html=True)
-    level_totals = (
-        selected_rows.groupby(["situacion_codigo", "nivel"], as_index=False)
-        .agg(deudores=("deudores", "sum"), monto_total_miles_pesos=("monto_total_miles_pesos", "sum"))
-        .sort_values("situacion_codigo", key=lambda col: col.map({level: idx for idx, level in enumerate(LEVEL_ORDER)}))
+    st.markdown('<div class="section-title">Mapa cantidad vs monto promedio</div>', unsafe_allow_html=True)
+    scatter_source = entity_selected[entity_selected["deudores"].gt(0)].copy()
+    scatter_source["bubble_size"] = scatter_source["monto_total_miles_pesos"].clip(lower=1)
+    fig_scatter = px.scatter(
+        scatter_source,
+        x="deudores",
+        y="monto_promedio_pesos",
+        size="bubble_size",
+        color="sector",
+        hover_name="nombre_entidad",
+        hover_data={
+            "codigo_entidad": True,
+            "deudores": ":,.0f",
+            "monto_total_miles_pesos": ":,.0f",
+            "monto_promedio_pesos": ":,.0f",
+            "bubble_size": False,
+        },
+        labels={
+            "deudores": "deudores en niveles seleccionados",
+            "monto_promedio_pesos": "monto promedio por deudor ($)",
+        },
+        color_discrete_map={"Financiero": "#4c8dff", "No Financiero": "#ff5c68"},
     )
-    fig_donut = px.pie(
-        level_totals,
-        names="nivel",
-        values="monto_total_miles_pesos",
-        hole=0.58,
-        color="situacion_codigo",
-        color_discrete_map={
-            "0": "#9aa3b2",
-            "1": "#58d68d",
-            "2": "#4c8dff",
-            "3": "#f2b84b",
-            "4": "#ff8d4c",
-            "5": "#ff5c68",
-            "11": "#7f8cff",
+    fig_scatter.update_xaxes(type="log")
+    fig_scatter.update_traces(marker=dict(opacity=0.72, line=dict(width=0.5, color="rgba(255,255,255,0.35)")))
+    st.plotly_chart(base_layout(fig_scatter, height=460), width="stretch")
+
+    st.markdown('<div class="section-title">Detalle por entidad y nivel</div>', unsafe_allow_html=True)
+    detail = selected_rows.sort_values(["codigo_entidad", "situacion_codigo"])[
+        [
+            "codigo_entidad",
+            "nivel",
+            "deudores",
+            "monto_promedio_pesos",
+            "monto_total_miles_pesos",
+            "pct_deudores_segmento",
+            "pct_monto_segmento",
+            "nombre_entidad",
+        ]
+    ]
+
+    st.dataframe(
+        detail,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "codigo_entidad": "codigo",
+            "nivel": "nivel situacion",
+            "monto_promedio_pesos": st.column_config.NumberColumn("promedio $", format="%.0f"),
+            "monto_total_miles_pesos": st.column_config.NumberColumn("monto total miles $", format="%.0f"),
+            "pct_deudores_segmento": st.column_config.NumberColumn("% deudores segmento", format="%.2f%%"),
+            "pct_monto_segmento": st.column_config.NumberColumn("% monto segmento", format="%.2f%%"),
         },
     )
-    fig_donut.update_traces(textposition="inside", textinfo="percent")
-    st.plotly_chart(base_layout(fig_donut, height=325), width="stretch")
 
-st.markdown('<div class="section-title">Mapa cantidad vs monto promedio</div>', unsafe_allow_html=True)
-scatter_source = entity_selected[entity_selected["deudores"].gt(0)].copy()
-scatter_source["bubble_size"] = scatter_source["monto_total_miles_pesos"].clip(lower=1)
-fig_scatter = px.scatter(
-    scatter_source,
-    x="deudores",
-    y="monto_promedio_pesos",
-    size="bubble_size",
-    color="sector",
-    hover_name="nombre_entidad",
-    hover_data={
-        "codigo_entidad": True,
-        "deudores": ":,.0f",
-        "monto_total_miles_pesos": ":,.0f",
-        "monto_promedio_pesos": ":,.0f",
-        "bubble_size": False,
-    },
-    labels={
-        "deudores": "deudores en niveles seleccionados",
-        "monto_promedio_pesos": "monto promedio por deudor ($)",
-    },
-    color_discrete_map={"Financiero": "#4c8dff", "No Financiero": "#ff5c68"},
-)
-fig_scatter.update_xaxes(type="log")
-fig_scatter.update_traces(marker=dict(opacity=0.72, line=dict(width=0.5, color="rgba(255,255,255,0.35)")))
-st.plotly_chart(base_layout(fig_scatter, height=460), width="stretch")
+with rankings_tab:
+    st.markdown('<div class="section-title">Rankings de entidades</div>', unsafe_allow_html=True)
+    st.caption("Tamaño de cartera usa todos los niveles. Morosidad usa niveles 2 a 5 sobre el total de cada entidad.")
 
-st.markdown('<div class="section-title">Detalle por entidad y nivel</div>', unsafe_allow_html=True)
-detail = selected_rows.sort_values(["codigo_entidad", "situacion_codigo"])[
-    [
-        "codigo_entidad",
-        "nivel",
-        "deudores",
-        "monto_promedio_pesos",
-        "monto_total_miles_pesos",
-        "pct_deudores_segmento",
-        "pct_monto_segmento",
-        "nombre_entidad",
+    ranking_scope = df[df["tipo_segmento"].eq(selected_segment)].copy()
+    if selected_sector != "Todos":
+        ranking_scope = ranking_scope[ranking_scope["sector"].eq(selected_sector)]
+    ranking = build_rankings(ranking_scope)
+    if min_debtors:
+        ranking = ranking[ranking["deudores_total"].ge(min_debtors)]
+
+    ranking_options = {
+        "Tamaño cartera: monto": ("monto_total_cartera_miles", "monto total cartera (miles $)", fmt_money_miles),
+        "Tamaño cartera: deudores": ("deudores_total", "deudores totales", fmt_int),
+        "Morosidad: % monto": ("pct_monto_moroso", "% monto moroso", fmt_pct),
+        "Morosidad: % deudores": ("pct_deudores_morosos", "% deudores morosos", fmt_pct),
+        "Morosidad: monto": ("monto_moroso_miles", "monto moroso (miles $)", fmt_money_miles),
+        "Morosidad: deudores": ("deudores_morosos", "deudores morosos", fmt_int),
+    }
+    selected_ranking = st.segmented_control(
+        "Ordenar por",
+        options=list(ranking_options),
+        default="Tamaño cartera: monto",
+        key="rankings_orden",
+    )
+    ranking_metric, ranking_axis, ranking_formatter = ranking_options[selected_ranking]
+    ranking_top = ranking.sort_values(ranking_metric, ascending=False).head(20).copy()
+
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        kpi_card("Cartera total", fmt_money_miles(ranking["monto_total_cartera_miles"].sum()), f"{len(ranking)} entidades")
+    with r2:
+        kpi_card("Deudores total", fmt_int(ranking["deudores_total"].sum()), "ranking sin filtro de entidad")
+    with r3:
+        kpi_card(
+            "Morosidad por monto",
+            fmt_pct(weighted_pct(ranking["monto_moroso_miles"].sum(), ranking["monto_total_cartera_miles"].sum())),
+            "niveles 2 a 5",
+        )
+
+    fig_ranking = px.bar(
+        ranking_top.sort_values(ranking_metric),
+        x=ranking_metric,
+        y="nombre_corto",
+        orientation="h",
+        color=ranking_metric,
+        color_continuous_scale=["#4c8dff", "#f2b84b", "#ff5c68"],
+        labels={"nombre_corto": "", ranking_metric: ranking_axis},
+        hover_data={
+            "codigo_entidad": True,
+            "nombre_entidad": True,
+            "deudores_total": ":,.0f",
+            "monto_total_cartera_miles": ":,.0f",
+            "deudores_morosos": ":,.0f",
+            "monto_moroso_miles": ":,.0f",
+            "pct_deudores_morosos": ":.2f",
+            "pct_monto_moroso": ":.2f",
+            "nombre_corto": False,
+        },
+    )
+    fig_ranking.update_traces(marker_line_width=0, hovertemplate=None)
+    fig_ranking.update_layout(coloraxis_showscale=False, dragmode=False)
+    st.plotly_chart(base_layout(fig_ranking, height=620), width="stretch")
+
+    table = ranking_top[
+        [
+            "codigo_entidad",
+            "nombre_entidad",
+            "sector",
+            "deudores_total",
+            "monto_total_cartera_miles",
+            "deudores_morosos",
+            "monto_moroso_miles",
+            "pct_deudores_morosos",
+            "pct_monto_moroso",
+        ]
     ]
-]
-
-st.dataframe(
-    detail,
-    width="stretch",
-    hide_index=True,
-    column_config={
-        "codigo_entidad": "codigo",
-        "nivel": "nivel situacion",
-        "monto_promedio_pesos": st.column_config.NumberColumn("promedio $", format="%.0f"),
-        "monto_total_miles_pesos": st.column_config.NumberColumn("monto total miles $", format="%.0f"),
-        "pct_deudores_segmento": st.column_config.NumberColumn("% deudores segmento", format="%.2f%%"),
-        "pct_monto_segmento": st.column_config.NumberColumn("% monto segmento", format="%.2f%%"),
-    },
-)
+    st.dataframe(
+        table,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "codigo_entidad": "codigo",
+            "monto_total_cartera_miles": st.column_config.NumberColumn("cartera miles $", format="%.0f"),
+            "monto_moroso_miles": st.column_config.NumberColumn("mora miles $", format="%.0f"),
+            "pct_deudores_morosos": st.column_config.NumberColumn("% deudores mora", format="%.2f%%"),
+            "pct_monto_moroso": st.column_config.NumberColumn("% monto mora", format="%.2f%%"),
+        },
+    )
 
 st.caption(
     "Fuente: BCRA Central de Deudores del Sistema Financiero. "
