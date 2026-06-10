@@ -111,7 +111,7 @@ La pestaña `Rendimientos` consulta en vivo dos endpoints de ArgentinaDatos:
 
 Para plazos fijos se muestra una unica `TNA informada` por entidad. Si la API trae mas de un valor, se usa la mayor tasa disponible para comparar rendimientos. Los KPIs resumen mejor tasa, promedio simple y mediana.
 
-Para rendimientos cripto se filtra solo `USDT` y se muestra APY. Si una entidad viene con mas de un registro USDT, se toma el APY maximo. Los KPIs resumen mejor APY, promedio simple y mediana.
+Para rendimientos cripto se filtra solo `USDT` y se muestra APY. Si una entidad viene con mas de un registro USDT, se toma el APY maximo. Los KPIs resumen mejor APY y promedio simple.
 
 ## Que significa "minimo deudores"
 

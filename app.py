@@ -896,18 +896,14 @@ with yields_tab:
             else:
                 best_usdt = usdt_yields["apy"].max()
                 avg_usdt = usdt_yields["apy"].mean()
-                median_usdt = usdt_yields["apy"].median()
                 best_usdt = 0 if pd.isna(best_usdt) else best_usdt
                 avg_usdt = 0 if pd.isna(avg_usdt) else avg_usdt
-                median_usdt = 0 if pd.isna(median_usdt) else median_usdt
 
-                u1, u2, u3 = st.columns(3)
+                u1, u2 = st.columns(2)
                 with u1:
                     kpi_card("Mejor APY USDT", fmt_pct(best_usdt), "rendimientos cripto")
                 with u2:
                     kpi_card("APY promedio", fmt_pct(avg_usdt), "promedio simple")
-                with u3:
-                    kpi_card("APY mediana", fmt_pct(median_usdt), "punto medio del mercado")
 
                 fig_usdt = px.bar(
                     usdt_yields.sort_values("apy"),
