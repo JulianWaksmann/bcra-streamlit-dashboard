@@ -85,10 +85,11 @@ La distribucion por niveles seleccionados es interactiva. Al tocar una barra, el
 
 ## Pestañas
 
-La app tiene dos pestañas principales:
+La app tiene tres pestañas principales:
 
 - `Distribucion por niveles en entidades`: mantiene la vista interactiva original con filtros, ranking contextual, perfil por entidad, distribucion por nivel, mapa cantidad/promedio y detalle descargable.
 - `Rankings`: compara entidades entre si con rankings especificos.
+- `Rendimientos`: compara tasas de plazo fijo ARS y rendimientos USDT publicados por ArgentinaDatos.
 
 En `Rankings`, el tamaño de cartera se calcula con todos los niveles de situacion disponibles (`1`, `2`, `3`, `4`, `5` y `11`). La morosidad se calcula con niveles `2`, `3`, `4` y `5` sobre el total de cada entidad.
 
@@ -100,6 +101,17 @@ Rankings disponibles:
 - morosidad por cantidad absoluta de deudores
 
 La pestaña `Rankings` respeta `Segmento`, `Sector` y `Minimo deudores por entidad`, pero compara todas las entidades aunque en el selector `Entidad` haya una entidad puntual elegida para la pestaña de distribucion.
+
+## Rendimientos
+
+La pestaña `Rendimientos` consulta en vivo dos endpoints de ArgentinaDatos:
+
+- `https://api.argentinadatos.com/v1/finanzas/tasas/plazoFijo`
+- `https://api.argentinadatos.com/v1/finanzas/rendimientos`
+
+Para plazos fijos se muestra TNA de clientes y no clientes. El match con BCRA se hace primero por el codigo de entidad incluido en el nombre del logo BCRA cuando esta disponible; si no existe, se intenta por nombre normalizado. `UALA` se vincula por alias con `UALA BANK S.A.U.`.
+
+Para rendimientos cripto se filtra solo `USDT` y se muestra APY. Si una entidad viene con mas de un registro USDT, se toma el APY maximo y se conserva la cantidad de registros como referencia.
 
 ## Que significa "minimo deudores"
 
