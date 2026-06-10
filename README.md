@@ -109,9 +109,9 @@ La pestaña `Rendimientos` consulta en vivo dos endpoints de ArgentinaDatos:
 - `https://api.argentinadatos.com/v1/finanzas/tasas/plazoFijo`
 - `https://api.argentinadatos.com/v1/finanzas/rendimientos`
 
-Para plazos fijos se muestra una unica `TNA informada` por entidad. Si la API trae mas de un valor, se usa la mayor tasa disponible para comparar rendimientos. El match con BCRA se hace primero por el codigo de entidad incluido en el nombre del logo BCRA cuando esta disponible; si no existe, se intenta por nombre normalizado. `UALA` se vincula por alias con `UALA BANK S.A.U.`.
+Para plazos fijos se muestra una unica `TNA informada` por entidad. Si la API trae mas de un valor, se usa la mayor tasa disponible para comparar rendimientos. Los KPIs resumen mejor tasa, promedio simple y mediana.
 
-Para rendimientos cripto se filtra solo `USDT` y se muestra APY. Si una entidad viene con mas de un registro USDT, se toma el APY maximo y se conserva la cantidad de registros como referencia.
+Para rendimientos cripto se filtra solo `USDT` y se muestra APY. Si una entidad viene con mas de un registro USDT, se toma el APY maximo. Los KPIs resumen mejor APY, promedio simple y mediana.
 
 ## Que significa "minimo deudores"
 

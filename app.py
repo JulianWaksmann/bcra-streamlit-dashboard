@@ -826,19 +826,21 @@ with yields_tab:
             if plazo_fijo.empty:
                 st.info("La API no devolvio tasas de plazo fijo.")
             else:
-                best_tna = plazo_fijo["tna_pct"].max()
-                best_tna = 0 if pd.isna(best_tna) else best_tna
-                matched = int(plazo_fijo["match_bcra"].sum())
-                total_rates = len(plazo_fijo)
                 pf_with_rate = plazo_fijo.dropna(subset=["tna_pct"]).copy()
+                best_tna = pf_with_rate["tna_pct"].max()
+                avg_tna = pf_with_rate["tna_pct"].mean()
+                median_tna = pf_with_rate["tna_pct"].median()
+                best_tna = 0 if pd.isna(best_tna) else best_tna
+                avg_tna = 0 if pd.isna(avg_tna) else avg_tna
+                median_tna = 0 if pd.isna(median_tna) else median_tna
 
                 p1, p2, p3 = st.columns(3)
                 with p1:
                     kpi_card("Mejor TNA", fmt_pct(best_tna), "mayor tasa informada")
                 with p2:
-                    kpi_card("Entidades con tasa", fmt_int(len(pf_with_rate)), "plazo fijo ARS")
+                    kpi_card("TNA promedio", fmt_pct(avg_tna), "promedio simple")
                 with p3:
-                    kpi_card("Match con BCRA", f"{matched}/{total_rates}", "por codigo de entidad o nombre")
+                    kpi_card("TNA mediana", fmt_pct(median_tna), "punto medio del mercado")
 
                 pf_chart = pf_with_rate.sort_values("tna_pct", ascending=False).head(20).copy()
                 fig_pf = px.bar(
@@ -862,14 +864,13 @@ with yields_tab:
                 fig_pf.update_layout(coloraxis_showscale=False, dragmode=False)
                 st.plotly_chart(base_layout(fig_pf, height=590), width="stretch")
 
-            st.markdown('<div class="section-title">Detalle de plazos fijos y match BCRA</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">Detalle de plazos fijos</div>', unsafe_allow_html=True)
             pf_table = plazo_fijo.sort_values("tna_pct", ascending=False)[
                 [
                     "codigo_bcra",
                     "entidad",
                     "nombre_bcra",
                     "sector_bcra",
-                    "match_bcra",
                     "tna_pct",
                     "enlace",
                 ]
@@ -883,7 +884,6 @@ with yields_tab:
                     "entidad": "entidad API",
                     "nombre_bcra": "entidad BCRA",
                     "sector_bcra": "sector BCRA",
-                    "match_bcra": "match",
                     "tna_pct": st.column_config.NumberColumn("TNA informada", format="%.2f%%"),
                     "enlace": st.column_config.LinkColumn("enlace"),
                 },
@@ -895,16 +895,19 @@ with yields_tab:
                 st.info("La API no devolvio rendimientos USDT.")
             else:
                 best_usdt = usdt_yields["apy"].max()
+                avg_usdt = usdt_yields["apy"].mean()
+                median_usdt = usdt_yields["apy"].median()
                 best_usdt = 0 if pd.isna(best_usdt) else best_usdt
-                latest_usdt = usdt_yields["fecha"].max()
+                avg_usdt = 0 if pd.isna(avg_usdt) else avg_usdt
+                median_usdt = 0 if pd.isna(median_usdt) else median_usdt
 
                 u1, u2, u3 = st.columns(3)
                 with u1:
                     kpi_card("Mejor APY USDT", fmt_pct(best_usdt), "rendimientos cripto")
                 with u2:
-                    kpi_card("Entidades USDT", fmt_int(len(usdt_yields)), "con rendimiento informado")
+                    kpi_card("APY promedio", fmt_pct(avg_usdt), "promedio simple")
                 with u3:
-                    kpi_card("Ultima fecha", str(latest_usdt), "segun API")
+                    kpi_card("APY mediana", fmt_pct(median_usdt), "punto medio del mercado")
 
                 fig_usdt = px.bar(
                     usdt_yields.sort_values("apy"),
