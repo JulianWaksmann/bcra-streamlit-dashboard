@@ -265,6 +265,7 @@ def build_plazo_fijo_table(api_rows: list[dict], catalog: pd.DataFrame) -> pd.Da
     matched_by_code["match_bcra"] = matched_by_code["codigo_bcra"].notna()
     matched_by_code["tna_clientes_pct"] = pd.to_numeric(matched_by_code["tnaClientes"], errors="coerce") * 100
     matched_by_code["tna_no_clientes_pct"] = pd.to_numeric(matched_by_code["tnaNoClientes"], errors="coerce") * 100
+    matched_by_code["tna_pct"] = matched_by_code[["tna_clientes_pct", "tna_no_clientes_pct"]].max(axis=1)
     matched_by_code["entidad_mostrar"] = matched_by_code["nombre_bcra"].fillna(matched_by_code["entidad"])
     matched_by_code["nombre_corto"] = matched_by_code["entidad_mostrar"].str.slice(0, 36)
     return matched_by_code
@@ -804,8 +805,7 @@ with yields_tab:
     st.markdown('<div class="section-title">Rendimientos comparados</div>', unsafe_allow_html=True)
     st.caption(
         "Plazos fijos ARS salen de ArgentinaDatos y se matchean contra BCRA por codigo del logo cuando existe. "
-        "USDT usa la API de rendimientos y queda filtrado a esa moneda. "
-        "Las tasas de plazo fijo se muestran como TNA; USDT se muestra como APY."
+        "USDT usa la API de rendimientos y queda filtrado a esa moneda. Plazo fijo se muestra como TNA; USDT como APY."
     )
 
     try:
@@ -819,54 +819,41 @@ with yields_tab:
     if plazo_fijo.empty and usdt_yields.empty:
         st.info("No hay datos de rendimientos para mostrar.")
     else:
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            best_client = plazo_fijo["tna_clientes_pct"].max() if not plazo_fijo.empty else 0
-            best_client = 0 if pd.isna(best_client) else best_client
-            kpi_card("Mejor TNA clientes", fmt_pct(best_client), "plazo fijo ARS")
-        with c2:
-            best_non_client = plazo_fijo["tna_no_clientes_pct"].dropna().max() if not plazo_fijo.empty else 0
-            best_non_client = 0 if pd.isna(best_non_client) else best_non_client
-            kpi_card("Mejor TNA no clientes", fmt_pct(best_non_client), "plazo fijo ARS")
-        with c3:
-            best_usdt = usdt_yields["apy"].max() if not usdt_yields.empty else 0
-            best_usdt = 0 if pd.isna(best_usdt) else best_usdt
-            kpi_card("Mejor APY USDT", fmt_pct(best_usdt), "rendimientos cripto")
-        with c4:
-            matched = int(plazo_fijo["match_bcra"].sum()) if not plazo_fijo.empty else 0
-            total_rates = len(plazo_fijo) if not plazo_fijo.empty else 0
-            kpi_card("Match con BCRA", f"{matched}/{total_rates}", "por codigo de entidad o nombre")
+        plazo_fijo_tab, usdt_tab = st.tabs(["Plazo fijo", "USDT"])
 
-        left, right = st.columns([1.35, 1])
-
-        with left:
+        with plazo_fijo_tab:
             st.markdown('<div class="section-title">Plazos fijos ARS por entidad</div>', unsafe_allow_html=True)
             if plazo_fijo.empty:
                 st.info("La API no devolvio tasas de plazo fijo.")
             else:
-                rate_view = st.segmented_control(
-                    "Tasa a comparar",
-                    options=["Clientes", "No clientes"],
-                    default="Clientes",
-                    key="plazo_fijo_rate_view",
-                )
-                rate_col = "tna_clientes_pct" if rate_view == "Clientes" else "tna_no_clientes_pct"
-                rate_label = "TNA clientes (%)" if rate_view == "Clientes" else "TNA no clientes (%)"
-                pf_chart = plazo_fijo.dropna(subset=[rate_col]).sort_values(rate_col, ascending=False).head(20).copy()
+                best_tna = plazo_fijo["tna_pct"].max()
+                best_tna = 0 if pd.isna(best_tna) else best_tna
+                matched = int(plazo_fijo["match_bcra"].sum())
+                total_rates = len(plazo_fijo)
+                pf_with_rate = plazo_fijo.dropna(subset=["tna_pct"]).copy()
+
+                p1, p2, p3 = st.columns(3)
+                with p1:
+                    kpi_card("Mejor TNA", fmt_pct(best_tna), "mayor tasa informada")
+                with p2:
+                    kpi_card("Entidades con tasa", fmt_int(len(pf_with_rate)), "plazo fijo ARS")
+                with p3:
+                    kpi_card("Match con BCRA", f"{matched}/{total_rates}", "por codigo de entidad o nombre")
+
+                pf_chart = pf_with_rate.sort_values("tna_pct", ascending=False).head(20).copy()
                 fig_pf = px.bar(
-                    pf_chart.sort_values(rate_col),
-                    x=rate_col,
+                    pf_chart.sort_values("tna_pct"),
+                    x="tna_pct",
                     y="nombre_corto",
                     orientation="h",
-                    color=rate_col,
+                    color="tna_pct",
                     color_continuous_scale=["#4c8dff", "#f2b84b", "#58d68d"],
-                    labels={"nombre_corto": "", rate_col: rate_label},
+                    labels={"nombre_corto": "", "tna_pct": "TNA informada (%)"},
                     hover_data={
                         "entidad": True,
                         "codigo_bcra": True,
                         "nombre_bcra": True,
-                        "tna_clientes_pct": ":.2f",
-                        "tna_no_clientes_pct": ":.2f",
+                        "tna_pct": ":.2f",
                         "match_bcra": True,
                         "nombre_corto": False,
                     },
@@ -875,11 +862,50 @@ with yields_tab:
                 fig_pf.update_layout(coloraxis_showscale=False, dragmode=False)
                 st.plotly_chart(base_layout(fig_pf, height=590), width="stretch")
 
-        with right:
+            st.markdown('<div class="section-title">Detalle de plazos fijos y match BCRA</div>', unsafe_allow_html=True)
+            pf_table = plazo_fijo.sort_values("tna_pct", ascending=False)[
+                [
+                    "codigo_bcra",
+                    "entidad",
+                    "nombre_bcra",
+                    "sector_bcra",
+                    "match_bcra",
+                    "tna_pct",
+                    "enlace",
+                ]
+            ].copy()
+            st.dataframe(
+                pf_table,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "codigo_bcra": "codigo BCRA",
+                    "entidad": "entidad API",
+                    "nombre_bcra": "entidad BCRA",
+                    "sector_bcra": "sector BCRA",
+                    "match_bcra": "match",
+                    "tna_pct": st.column_config.NumberColumn("TNA informada", format="%.2f%%"),
+                    "enlace": st.column_config.LinkColumn("enlace"),
+                },
+            )
+
+        with usdt_tab:
             st.markdown('<div class="section-title">Rendimiento USDT</div>', unsafe_allow_html=True)
             if usdt_yields.empty:
                 st.info("La API no devolvio rendimientos USDT.")
             else:
+                best_usdt = usdt_yields["apy"].max()
+                best_usdt = 0 if pd.isna(best_usdt) else best_usdt
+                latest_usdt = usdt_yields["fecha"].max()
+
+                u1, u2, u3 = st.columns(3)
+                with u1:
+                    kpi_card("Mejor APY USDT", fmt_pct(best_usdt), "rendimientos cripto")
+                with u2:
+                    kpi_card("Entidades USDT", fmt_int(len(usdt_yields)), "con rendimiento informado")
+                with u3:
+                    kpi_card("Ultima fecha", str(latest_usdt), "segun API")
+
                 fig_usdt = px.bar(
                     usdt_yields.sort_values("apy"),
                     x="apy",
@@ -894,47 +920,16 @@ with yields_tab:
                 fig_usdt.update_layout(coloraxis_showscale=False, dragmode=False)
                 st.plotly_chart(base_layout(fig_usdt, height=590), width="stretch")
 
-        if not plazo_fijo.empty:
-            st.markdown('<div class="section-title">Detalle de plazos fijos y match BCRA</div>', unsafe_allow_html=True)
-            pf_table = plazo_fijo.sort_values("tna_clientes_pct", ascending=False)[
-                [
-                    "codigo_bcra",
-                    "entidad",
-                    "nombre_bcra",
-                    "sector_bcra",
-                    "match_bcra",
-                    "tna_clientes_pct",
-                    "tna_no_clientes_pct",
-                    "enlace",
-                ]
-            ].copy()
-            st.dataframe(
-                pf_table,
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "codigo_bcra": "codigo BCRA",
-                    "entidad": "entidad API",
-                    "nombre_bcra": "entidad BCRA",
-                    "sector_bcra": "sector BCRA",
-                    "match_bcra": "match",
-                    "tna_clientes_pct": st.column_config.NumberColumn("TNA clientes", format="%.2f%%"),
-                    "tna_no_clientes_pct": st.column_config.NumberColumn("TNA no clientes", format="%.2f%%"),
-                    "enlace": st.column_config.LinkColumn("enlace"),
-                },
-            )
-
-        if not usdt_yields.empty:
-            st.markdown('<div class="section-title">Detalle USDT</div>', unsafe_allow_html=True)
-            st.dataframe(
-                usdt_yields.sort_values("apy", ascending=False),
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "apy": st.column_config.NumberColumn("APY", format="%.2f%%"),
-                    "ofertas": "registros USDT",
-                },
-            )
+                st.markdown('<div class="section-title">Detalle USDT</div>', unsafe_allow_html=True)
+                st.dataframe(
+                    usdt_yields.sort_values("apy", ascending=False),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "apy": st.column_config.NumberColumn("APY", format="%.2f%%"),
+                        "ofertas": "registros USDT",
+                    },
+                )
 
 st.caption(
     "Fuente: BCRA Central de Deudores del Sistema Financiero. "
