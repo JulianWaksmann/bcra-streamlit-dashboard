@@ -434,7 +434,10 @@ with distribution_tab:
 
     with left:
         if selected_entity == "Todas":
-            st.markdown('<div class="section-title">Ranking por niveles seleccionados</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-title">Distribucion por niveles seleccionados</div>',
+                unsafe_allow_html=True,
+            )
             st.caption("Toca una barra para filtrar automaticamente esa entidad.")
             fig_rank = px.bar(
                 top.sort_values(rank_metric),

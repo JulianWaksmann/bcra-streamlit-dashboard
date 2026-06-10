@@ -81,7 +81,7 @@ En la tabla de detalle el promedio se muestra en pesos estimados. El monto total
 
 ## Interaccion del ranking
 
-El ranking por niveles seleccionados es interactivo. Al tocar una barra, el selector `Entidad` se actualiza automaticamente con esa entidad y todo el tablero queda filtrado a ella.
+La distribucion por niveles seleccionados es interactiva. Al tocar una barra, el selector `Entidad` se actualiza automaticamente con esa entidad y todo el tablero queda filtrado a ella.
 
 ## Pestañas
 
